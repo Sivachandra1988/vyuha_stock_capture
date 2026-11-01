@@ -21,3 +21,4 @@ fi
 
 # Launch integrated dashboard and scanner
 python3 dashboard_server.py --host "$HOST" --port "$PORT"
+
