@@ -17,6 +17,11 @@ scanning capabilities:
 import os
 import sys
 import json
+import warnings
+warnings.filterwarnings("ignore")
+warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.simplefilter(action='ignore', category=UserWarning)
+
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -419,9 +424,15 @@ def run_vyuha_daily_scan(send_telegram_fn=None, custom_tickers=None):
             if len(tickers) == 1:
                 df = df_all.dropna()
             else:
-                if ticker_ns not in df_all.columns.levels[0]:
+                if isinstance(df_all.columns, pd.MultiIndex):
+                    if ticker_ns in df_all.columns.get_level_values(0):
+                        df = df_all[ticker_ns].dropna()
+                    elif ticker_ns in df_all.columns.get_level_values(1):
+                        df = df_all.xs(ticker_ns, axis=1, level=1).dropna()
+                    else:
+                        continue
+                else:
                     continue
-                df = df_all[ticker_ns].dropna()
 
             df = clean_dataframe(df)
             if len(df) < 50:
@@ -510,7 +521,38 @@ def run_vyuha_daily_scan(send_telegram_fn=None, custom_tickers=None):
     with open(VYUHA_DAILY_WATCHLIST_FILE, "w") as f:
         json.dump(watchlist_candidates, f, indent=4)
 
-    print(f"🎯 [VYUHA DAILY] Completed. Found {len(watchlist_candidates)} institutional action candidates.")
+    # Clean, beautiful terminal output table
+    print("\n" + "=" * 78)
+    print(f"🏛️  UMX VYUHA DAILY INSTITUTIONAL WATCHLIST — {len(watchlist_candidates)} Candidates Found")
+    print("=" * 78)
+
+    top_longs = [c for c in watchlist_candidates if c['bias'] == 'LONG']
+    top_shorts = [c for c in watchlist_candidates if c['bias'] == 'SHORT']
+
+    if top_longs:
+        print(f"\n🟢 BULLISH ACTION CANDIDATES ({len(top_longs)}):")
+        print(f"  {'TICKER':<12} {'CLOSE':<10} {'SETUP':<24} {'DEMAND 1':<20} {'POC':<10}")
+        print("  " + "-" * 74)
+        for c in top_longs:
+            dem_str = f"[{c['demand_1'][0]:.1f} - {c['demand_1'][1]:.1f}]"
+            poc_str = f"{c['vol_poc']:.2f}" if c.get('vol_poc') else "N/A"
+            print(f"  {c['ticker']:<12} {c['close']:<10.2f} {c['setup']:<24} {dem_str:<20} {poc_str:<10}")
+
+    if top_shorts:
+        print(f"\n🔴 BEARISH ACTION CANDIDATES ({len(top_shorts)}):")
+        print(f"  {'TICKER':<12} {'CLOSE':<10} {'SETUP':<24} {'SUPPLY 1':<20} {'POC':<10}")
+        print("  " + "-" * 74)
+        for c in top_shorts:
+            sup_str = f"[{c['supply_1'][0]:.1f} - {c['supply_1'][1]:.1f}]"
+            poc_str = f"{c['vol_poc']:.2f}" if c.get('vol_poc') else "N/A"
+            print(f"  {c['ticker']:<12} {c['close']:<10.2f} {c['setup']:<24} {sup_str:<20} {poc_str:<10}")
+
+    if not watchlist_candidates:
+        print("\nℹ️  No stocks currently interacting with high-confluence zones.")
+
+    print("\n" + "=" * 78)
+    print(f"📁 Saved to: {VYUHA_DAILY_WATCHLIST_FILE}")
+    print("=" * 78 + "\n")
 
     if send_telegram_fn and watchlist_candidates:
         top_longs = [c for c in watchlist_candidates if c['bias'] == 'LONG'][:4]
@@ -724,10 +766,25 @@ def execute_vyuha_intraday_scan(send_telegram_fn=None, market_trend="NEUTRAL"):
                 df_intra = df_intra_all.dropna()
                 df_daily = df_daily_all.dropna()
             else:
-                if ticker_ns not in df_intra_all.columns.levels[0] or ticker_ns not in df_daily_all.columns.levels[0]:
+                if isinstance(df_intra_all.columns, pd.MultiIndex):
+                    if ticker_ns in df_intra_all.columns.get_level_values(0):
+                        df_intra = df_intra_all[ticker_ns].dropna()
+                    elif ticker_ns in df_intra_all.columns.get_level_values(1):
+                        df_intra = df_intra_all.xs(ticker_ns, axis=1, level=1).dropna()
+                    else:
+                        continue
+                else:
                     continue
-                df_intra = df_intra_all[ticker_ns].dropna()
-                df_daily = df_daily_all[ticker_ns].dropna()
+
+                if isinstance(df_daily_all.columns, pd.MultiIndex):
+                    if ticker_ns in df_daily_all.columns.get_level_values(0):
+                        df_daily = df_daily_all[ticker_ns].dropna()
+                    elif ticker_ns in df_daily_all.columns.get_level_values(1):
+                        df_daily = df_daily_all.xs(ticker_ns, axis=1, level=1).dropna()
+                    else:
+                        continue
+                else:
+                    continue
 
             res = evaluate_intraday_vyuha_setup(ticker, df_intra, df_daily)
             if res:
@@ -738,6 +795,20 @@ def execute_vyuha_intraday_scan(send_telegram_fn=None, market_trend="NEUTRAL"):
                 candidates.append(res)
         except Exception:
             continue
+
+    print("\n" + "=" * 78)
+    print(f"⚡ UMX VYUHA INTRADAY SIGNALS — {len(candidates)} Active Setups Found")
+    print("=" * 78)
+    if candidates:
+        for c in candidates:
+            arrow = "🟢 BUY" if c["direction"] == "BUY" else "🔴 SELL"
+            print(f"\n{arrow} | {c['ticker']} @ {c['entry']:.2f}")
+            print(f"  Zone: {c['zone']} | Setup: {c['setup']} | Diamond: {c['diamond']}")
+            print(f"  SL: {c['sl']:.2f} (Risk: {c['risk_pts']:.2f} pts) | T1: {c['target1']:.2f} | T2: {c['target2']:.2f} | POC: {c['poc']:.2f}")
+    else:
+        print("\nℹ️  No stocks currently meeting strict Intraday Confluence Execution Gates.")
+        print("   (Price is between zones or anti-trap wick conditions not triggered on the 15m bar)")
+    print("\n" + "=" * 78 + "\n")
 
     pt = trades.load_paper_trades()
     active_tickers = set([t["ticker"] for t in pt if t["status"] in ["ACTIVE", "PARTIAL_EXIT", "PENDING"]])

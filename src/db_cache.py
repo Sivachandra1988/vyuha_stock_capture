@@ -1,3 +1,8 @@
+import warnings
+warnings.filterwarnings("ignore")
+warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.simplefilter(action='ignore', category=UserWarning)
+
 import pandas as pd
 import yfinance as yf
 import datetime
@@ -173,7 +178,7 @@ def get_cached_yfinance(tickers, period="1y", interval="1d", group_by="column", 
         
         if data:
             df_t = pd.DataFrame(data)
-            df_t.set_index("timestamp", inplace=True)
+            df_t = df_t.set_index("timestamp")
             df_t = df_t[["Open", "High", "Low", "Close", "Volume"]]
             df_t.index.name = "Date" if interval.endswith('d') or interval.endswith('wk') or interval.endswith('mo') else "Datetime"
             frames[t] = df_t
@@ -191,5 +196,5 @@ def get_cached_yfinance(tickers, period="1y", interval="1d", group_by="column", 
             return df_concat
         else:
             df_concat.columns = df_concat.columns.swaplevel(0, 1)
-            df_concat.sort_index(axis=1, level=0, inplace=True)
+            df_concat = df_concat.sort_index(axis=1, level=0)
             return df_concat

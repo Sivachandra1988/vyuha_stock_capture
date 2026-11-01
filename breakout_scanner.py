@@ -2,6 +2,11 @@ import os
 import sys
 import json
 import time
+import warnings
+warnings.filterwarnings("ignore")
+warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.simplefilter(action='ignore', category=UserWarning)
+
 import requests
 from datetime import datetime, time as dt_time
 
