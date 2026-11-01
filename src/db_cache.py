@@ -1,6 +1,5 @@
 import pandas as pd
 import yfinance as yf
-from pymongo import MongoClient
 import datetime
 import pytz
 import os
@@ -9,10 +8,14 @@ from db_connector import db
 
 def get_coll(ticker: str):
     """Dynamically get or create a symbol-wise collection with indexes."""
+    if db is None:
+        return None
     safe_t = ticker.replace('.', '_').replace('^', '')
     coll = db[f"ohlcv_{safe_t}"]
-    # Mongo intelligently skips this if the precise index already exists
-    coll.create_index([("interval", 1), ("timestamp", -1)], unique=True)
+    try:
+        coll.create_index([("interval", 1), ("timestamp", -1)], unique=True)
+    except Exception:
+        pass
     return coll
 
 def parse_period_to_cutoff(period: str):
@@ -35,8 +38,16 @@ def parse_period_to_cutoff(period: str):
 
 def get_cached_yfinance(tickers, period="1y", interval="1d", group_by="column", progress=False, auto_adjust=True):
     """
-    Drop-in replacement for yf.download() that persists data to MongoDB and only fetches delta (new) data.
+    Drop-in replacement for yf.download() that persists data to MongoDB when available.
+    If MongoDB is not running, falls back cleanly to direct yf.download().
     """
+    if db is None:
+        try:
+            return yf.download(tickers, period=period, interval=interval, group_by=group_by, progress=progress, auto_adjust=auto_adjust)
+        except Exception as e:
+            print(f"[db_cache] Direct fetch error: {e}")
+            return pd.DataFrame()
+
     if isinstance(tickers, str):
         if ',' in tickers:
             ticker_list = [t.strip() for t in tickers.split(',')]
@@ -51,33 +62,31 @@ def get_cached_yfinance(tickers, period="1y", interval="1d", group_by="column", 
     cutoff_date = parse_period_to_cutoff(period)
     
     # 1. Determine delta requirement
-    # Find the earliest required fetch date across all requested tickers
     fetch_start = None
     
     for t in ticker_list:
         coll = get_coll(t)
+        if coll is None:
+            fetch_start = cutoff_date
+            break
         latest_doc = coll.find_one({"interval": interval}, sort=[("timestamp", -1)])
         
         if latest_doc:
             ld = latest_doc["timestamp"]
             if ld.tzinfo is None:
                 ld = pytz.UTC.localize(ld)
-            # If the database's latest date is older than our required cutoff, we must fetch from cutoff
             if ld < cutoff_date:
                 fetch_start = cutoff_date
                 break
             else:
-                # We need data starting from the last date we have in DB
                 if fetch_start is None or ld < fetch_start:
                     fetch_start = ld
         else:
-            # We have nothing for this ticker, fetch from cutoff
             fetch_start = cutoff_date
             break
             
     # 2. Fetch missing delta via yfinance
     if fetch_start:
-        # Subtract some hours to ensure overlap of the last active bar
         dl_start = (fetch_start - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
         
         try:
@@ -89,7 +98,6 @@ def get_cached_yfinance(tickers, period="1y", interval="1d", group_by="column", 
         if not downloaded.empty:
             docs = []
             
-            # Format parser depending on single vs multiple tickers
             if len(ticker_list) == 1:
                 df_t = downloaded
                 if "Close" in df_t.columns:
@@ -131,56 +139,57 @@ def get_cached_yfinance(tickers, period="1y", interval="1d", group_by="column", 
                                 "Volume": float(row.get("Volume", 0.0))
                             })
                             
-            # Persist to Mongo (upsert existing) via Symbol-wise tables
             if docs:
-                from pymongo import UpdateOne
-                
-                # Group operations by ticker so we bulk_write to the correct collection
-                docs_by_ticker = {}
-                for d in docs:
-                    docs_by_ticker.setdefault(d["ticker"], []).append(d)
-                    
-                for t_sym, t_docs in docs_by_ticker.items():
-                    coll = get_coll(t_sym)
-                    operations = [
-                        UpdateOne(
-                            {"interval": d["interval"], "timestamp": d["timestamp"]},
-                            {"$set": d},
-                            upsert=True
-                        ) for d in t_docs
-                    ]
-                    if operations:
-                        coll.bulk_write(operations, ordered=False)
+                try:
+                    from pymongo import UpdateOne
+                    docs_by_ticker = {}
+                    for d in docs:
+                        docs_by_ticker.setdefault(d["ticker"], []).append(d)
+                        
+                    for t_sym, t_docs in docs_by_ticker.items():
+                        coll = get_coll(t_sym)
+                        if coll is None: continue
+                        operations = [
+                            UpdateOne(
+                                {"interval": d["interval"], "timestamp": d["timestamp"]},
+                                {"$set": d},
+                                upsert=True
+                            ) for d in t_docs
+                        ]
+                        if operations:
+                            coll.bulk_write(operations, ordered=False)
+                except Exception as e:
+                    print(f"[MongoCache] Bulk write error: {e}")
 
     # 3. Assemble and serve DataFrame from local MongoDB
     frames = {}
     for t in ticker_list:
         coll = get_coll(t)
+        if coll is None:
+            frames[t] = pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
+            continue
         cursor = coll.find({"interval": interval, "timestamp": {"$gte": cutoff_date}}).sort("timestamp", 1)
         data = list(cursor)
         
         if data:
             df_t = pd.DataFrame(data)
             df_t.set_index("timestamp", inplace=True)
-            df_t = df_t[["Open", "High", "Low", "Close", "Volume"]] # Enforce structure
+            df_t = df_t[["Open", "High", "Low", "Close", "Volume"]]
             df_t.index.name = "Date" if interval.endswith('d') or interval.endswith('wk') or interval.endswith('mo') else "Datetime"
             frames[t] = df_t
         else:
             frames[t] = pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
             
-    # Return formatted identically to yfinance
     if len(ticker_list) == 1:
         return frames[ticker_list[0]]
     else:
-        # Multi-ticker DataFrame reconstruction
-        df_concat = pd.concat(frames, axis=1) # Yields MultiIndex (Ticker, Column)
+        df_concat = pd.concat(frames, axis=1)
         if df_concat.empty:
             return df_concat
             
         if group_by == "ticker":
             return df_concat
         else:
-            # Yields MultiIndex (Column, Ticker) - Standard yfinance behavior
             df_concat.columns = df_concat.columns.swaplevel(0, 1)
             df_concat.sort_index(axis=1, level=0, inplace=True)
             return df_concat
