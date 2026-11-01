@@ -1,6 +1,11 @@
 import os
 import sys
 import json
+import warnings
+warnings.filterwarnings("ignore")
+warnings.simplefilter(action='ignore', category=DeprecationWarning)
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
@@ -402,16 +407,51 @@ def toggle_real_trade(ticker: str):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+import socket
+import argparse
+
+def get_local_ip():
+    """Detects local LAN IP for seamless laptop/tablet access on the same Wi-Fi."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
 def run_server():
-    import webbrowser
-    from threading import Timer
-    def open_browser():
-        try:
-            webbrowser.open("http://127.0.0.1:8080/")
-        except Exception:
-            pass
-    Timer(1.5, open_browser).start()
-    uvicorn.run(app, host="0.0.0.0", port=8080, access_log=False, log_level="warning")
+    parser = argparse.ArgumentParser(description="Trader Pilot Web Dashboard & Scanner Engine")
+    parser.add_argument("--host", default=os.environ.get("DASHBOARD_HOST", "0.0.0.0"), help="Host address (default: 0.0.0.0)")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("DASHBOARD_PORT", 8080)), help="Port number (default: 8080)")
+    parser.add_argument("--no-browser", action="store_true", help="Do not attempt to auto-launch local web browser")
+    args, _ = parser.parse_known_args()
+
+    local_ip = get_local_ip()
+
+    print("\n" + "=" * 70)
+    print("🌐  TRADER PILOT WEB DASHBOARD & SCANNER ENGINE")
+    print("=" * 70)
+    print(f"📱 Local Phone URL:    http://localhost:{args.port}  (or http://127.0.0.1:{args.port})")
+    if local_ip != "127.0.0.1":
+        print(f"💻 Laptop / Wi-Fi URL: http://{local_ip}:{args.port}")
+    else:
+        print(f"💻 Laptop / Wi-Fi URL: http://<YOUR_PHONE_WIFI_IP>:{args.port}")
+    print("   (Ensure your phone and laptop are connected to the same Wi-Fi/Hotspot)")
+    print("=" * 70 + "\n")
+
+    if not args.no_browser:
+        import webbrowser
+        from threading import Timer
+        def open_browser():
+            try:
+                webbrowser.open(f"http://127.0.0.1:{args.port}/")
+            except Exception:
+                pass
+        Timer(1.5, open_browser).start()
+
+    uvicorn.run(app, host=args.host, port=args.port, access_log=False, log_level="warning")
 
 if __name__ == "__main__":
     try:
