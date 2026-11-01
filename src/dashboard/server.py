@@ -406,9 +406,12 @@ def run_server():
     import webbrowser
     from threading import Timer
     def open_browser():
-        webbrowser.open("http://127.0.0.1:8080/")
+        try:
+            webbrowser.open("http://127.0.0.1:8080/")
+        except Exception:
+            pass
     Timer(1.5, open_browser).start()
-    uvicorn.run(app, host="127.0.0.1", port=8080, access_log=False, log_level="warning")
+    uvicorn.run(app, host="0.0.0.0", port=8080, access_log=False, log_level="warning")
 
 if __name__ == "__main__":
     try:
