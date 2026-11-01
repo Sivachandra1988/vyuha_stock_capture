@@ -213,10 +213,11 @@ def is_market_open():
             
     return True, "Market Open"
 
-def run_scanner_loop():
+def run_scanner_loop(daemon=False, force=False):
     try:
         print("===============================================================")
-        print(" [INFO] CONTINUOUS MODULAR TRADER PILOT ENGINE STARTED")
+        mode_str = "CONTINUOUS DAEMON" if daemon else "SINGLE RUN"
+        print(f" [INFO] MODULAR TRADER PILOT ENGINE ({mode_str})")
         print(f" Checking timings (NR7): {', '.join(CHECK_TIMINGS)}")
         print(f" Checking timings (Swing): {', '.join(SWING_TIMINGS)}")
         print(f" Checking timings (Adv Trend): Every 15m (09:30 - 15:15)")
@@ -226,24 +227,32 @@ def run_scanner_loop():
         load_alerts_state()
         
         open_status, reason = is_market_open()
-        if open_status:
-            print(f"[INFO] Engine starting: {reason}")
+        if not open_status and not force:
+            print(f"⏸️ [INFO] Market is CLOSED ({reason}). Process released.")
+            print("💡 Tip: To run continuous 24/7 background polling, use: python3 breakout_scanner.py --daemon")
+            print("💡 Tip: To force a test scan right now anyway, use: python3 breakout_scanner.py --force\n")
+            return
+
+        print(f"[INFO] Engine starting: {'FORCED EXECUTION' if force and not open_status else reason}")
+        
+        # Auto-populate if watchlist is completely empty
+        if not os.path.exists(WATCHLIST_FILE) or os.path.getsize(WATCHLIST_FILE) == 0:
+            print("[INFO] Watchlist is empty on startup. Forcing an initial swing scan...")
+            market_trend = get_nifty_trend()
+            swing.execute_swing_scan(send_telegram, force_full=True, market_trend=market_trend)
             
-            # Auto-populate if watchlist is completely empty
-            if not os.path.exists(WATCHLIST_FILE) or os.path.getsize(WATCHLIST_FILE) == 0:
-                print("[INFO] Watchlist is empty on startup. Forcing an initial swing scan...")
-                market_trend = get_nifty_trend()
-                swing.execute_swing_scan(send_telegram, force_full=True, market_trend=market_trend)
-                
-            execute_scan_cycle()
-        else:
-            print(f"[INFO] Engine suspended: {reason}")
+        execute_scan_cycle()
+
+        # If not daemon mode, release process immediately
+        if not daemon:
+            print("[INFO] Scan cycle complete. Process released.\n")
+            return
             
         global eod_scanned_today
         while True:
             open_status, reason = is_market_open()
             if not open_status:
-                print(f"[INFO] Market is CLOSED ({reason}). Engine sleeping...")
+                print(f"[INFO] Market is CLOSED ({reason}). Engine sleeping (5m)...")
                 time.sleep(300)
                 continue
                 
@@ -312,5 +321,11 @@ if __name__ == "__main__":
         elif sys.argv[1] == "--test-vyuha-intraday":
             vyuha.execute_vyuha_intraday_scan(send_telegram, market_trend="NEUTRAL")
             sys.exit(0)
+        elif sys.argv[1] in ["--daemon", "-d"]:
+            run_scanner_loop(daemon=True)
+            sys.exit(0)
+        elif sys.argv[1] in ["--force", "-f"]:
+            run_scanner_loop(daemon=False, force=True)
+            sys.exit(0)
 
-    run_scanner_loop()
+    run_scanner_loop(daemon=False)
