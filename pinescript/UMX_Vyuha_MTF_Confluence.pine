@@ -1,0 +1,2741 @@
+//@version=6
+indicator("UMX VYUHA — Institutional MTF Confluence (व्यूह)", shorttitle="UMX VYUHA", overlay=true, max_lines_count=500, max_boxes_count=500, max_labels_count=500, max_bars_back=1000)
+
+
+//=============================================================================
+// 1. INPUTS & CONFIGURATION
+//=============================================================================
+
+// --- Section: Instrument Type & Expiry Horizon ---
+grp_inst        = "0. Instrument & Expiry Horizon"
+instrumentMode  = input.string("Auto Detect", "Instrument Horizon Mode", options=["Auto Detect", "Options Contract (Month/Expiry Wise)", "Futures / Stocks / Spot (Multi-Month)"], group=grp_inst, tooltip="In Options mode, swing horizons and action zones dynamically calibrate to the active contract's expiry month and relative price levels. In Futures / Stocks mode, classical PDH/PDL institutional confluence zones and full multi-month swings are utilized.")
+
+// --- Section: Visual Theme & Clutter Control ---
+grp_clean       = "1. Chart Cleanliness & Display Settings"
+showBuySellZones= input.bool(true, "Show Clear BUY (Green) & SELL (Red) Zones", group=grp_clean, tooltip="Draws crystal-clear highlighted institutional Demand (Buy) and Supply (Sell) zones.")
+zoneAnchorMode  = input.string("Today's Start Candle", "Zone Box Anchor Origin", options=["Today's Start Candle", "When Zone Created"], group=grp_clean, tooltip="Choose where the left edge of the zone box begins: from today's session open candle, or from the exact candle when the zone level was formed. The box extends into the forward margin without sliding.")
+zoneHeightMult  = input.float(1.2, "Action Zone Thickness (ATR Multiple)", minval=0.3, maxval=4.0, step=0.1, group=grp_clean, tooltip="Controls the height/thickness of Buy & Sell boxes. Keeps candles nicely visible without distortion.")
+confluenceAtrMax= input.float(2.5, "Confluence Cluster Max ATR Distance", minval=1.0, maxval=6.0, step=0.5, group=grp_clean, tooltip="If 1H/2H swing levels are within this ATR distance from PDH/PDL, they are grouped into a tight confluence zone.")
+showPDRangeBox  = input.bool(false, "Show Full Previous Day Shaded Box (Disabled to avoid clutter)", group=grp_clean, tooltip="Enable only if you want the entire yesterday range tinted. Default false keeps chart clean.")
+showChopZoneBox = input.bool(true, "Show Choppy / Sideways Equilibrium Box", group=grp_clean, tooltip="Draws a shaded neutral box for the 38%-62% middle equilibrium and tight squeeze chop area where directional edge is absent.")
+showMiddleEqBox = input.bool(false, "Show Middle Range Grey Box (Deprecated alias for Chop Box)", group=grp_clean, tooltip="Alias for Chop Box to maintain backward compatibility.")
+showEquilibriumLine = input.bool(true, "Show Equilibrium 50% Midpoint Line", group=grp_clean, tooltip="Plots the exact 50% Fair Value / Equilibrium price line and label between Supply and Demand.")
+showExpansionZones = input.bool(true, "Show Multi-Tier Expansion Zones (Zone 2 Targets)", group=grp_clean, tooltip="Displays the next higher Supply Zone (Target 2 if Supply 1 breaks) and next lower Demand Zone (Target 2 if Demand 1 breaks).")
+showCompletedZones = input.bool(true, "Show Completed / Mitigated Zones in Grey Mode", group=grp_clean, tooltip="When a zone breaks and flips, the original completed zone that initiated the move is preserved in sleek Grey Mode.")
+showRetraceArea   = input.bool(true, "Highlight Pullback / Retracement Area Inside Zones", group=grp_clean, tooltip="Visually marks the golden Pullback/Retracement band inside Demand & Supply Zones with exact Stop-Loss level.")
+showFrvpPoc       = input.bool(true, "Show Dynamic Volume POC (Institutional Center of Gravity)", group=grp_clean, tooltip="Calculates the heaviest volume Point of Control (FRVP POC) between Demand & Supply zones to pinpoint the exact reversal pivot.")
+showZoneAvwap     = input.bool(true, "Show Zone-Anchored AVWAP Retrace Lines", group=grp_clean, tooltip="Calculates and displays the volume-weighted average price (AVWAP) anchored from the active Demand & Supply origins.")
+avwapLabelSize    = input.string("Small (Readable)", "AVWAP Label Font Size", options=["Small (Readable)", "Normal (Prominent)", "Large"], group=grp_clean, tooltip="Adjust font size of the AVWAP price tag for enhanced legibility on chart.")
+colEqLine         = input.color(color.new(#FFD54F, 0), "Equilibrium 50% Line Color", group=grp_clean, inline="eq_col")
+colChopBox        = input.color(color.new(#78909C, 88), "Choppy / Sideways Box Color", group=grp_clean, inline="eq_col")
+colPocBull        = input.color(color.new(#00E5FF, 0), "Bullish Volume POC Color", group=grp_clean, inline="poc_col")
+colPocBear        = input.color(color.new(#FF9800, 0), "Bearish Volume POC Color", group=grp_clean, inline="poc_col")
+
+// --- Section: Timeframe Swings ---
+grp_tf          = "1. Multi-Timeframe Swing Levels"
+showMonthlySwings = input.bool(false, "Show Monthly (M) Swings Lines on Chart", group=grp_tf, tooltip="Keep disabled for an ultra-clean chart. All levels are monitored cleanly inside the HUD Matrix table.")
+monthlyLookbackBars = input.int(12, "Monthly Swings Lookback (1 Year)", minval=4, maxval=60, group=grp_tf)
+colMonthlyHigh  = input.color(color.new(#D500F9, 0), "Monthly Swing High Color", group=grp_tf, inline="m_col")
+colMonthlyLow   = input.color(color.new(#EA80FC, 0), "Monthly Swing Low Color", group=grp_tf, inline="m_col")
+
+showWeeklySwings = input.bool(false, "Show Weekly (W) Swings Lines on Chart", group=grp_tf, tooltip="Keep disabled for an ultra-clean chart. All levels are monitored cleanly inside the HUD Matrix table.")
+weeklyLookbackBars = input.int(52, "Weekly Swings Lookback (1 Year)", minval=10, maxval=150, group=grp_tf)
+colWeeklyHigh   = input.color(color.new(#FF6D00, 0), "Weekly Swing High Color", group=grp_tf, inline="w_col")
+colWeeklyLow    = input.color(color.new(#FFD180, 0), "Weekly Swing Low Color", group=grp_tf, inline="w_col")
+
+showDailySwings = input.bool(false, "Show Daily (D) Swings Lines on Chart", group=grp_tf, tooltip="Keep disabled for an ultra-clean chart. All levels are monitored cleanly inside the HUD Matrix table.")
+dailyLookbackBars = input.int(88, "Daily Swings Lookback (4 Months)", minval=20, maxval=250, group=grp_tf, tooltip="88 daily sessions equals approximately 4 months.")
+colDailyHigh    = input.color(color.new(#FF9800, 0), "Daily Swing High Color", group=grp_tf, inline="d_col")
+colDailyLow     = input.color(color.new(#FFB74D, 0), "Daily Swing Low Color", group=grp_tf, inline="d_col")
+
+show4HSwings    = input.bool(false, "Show 4-Hour (240m) Swings Lines on Chart", group=grp_tf, tooltip="Keep disabled for an ultra-clean chart. All levels are monitored cleanly inside the HUD Matrix table.")
+h4LookbackBars  = input.int(165, "4-Hour Swings Lookback (2 Months)", minval=30, maxval=400, group=grp_tf, tooltip="165 4-hour bars covers at least 2 full months of trading.")
+col4HHigh       = input.color(color.new(#7C4DFF, 0), "4H Swing High Color", group=grp_tf, inline="4h_col")
+col4HLow        = input.color(color.new(#B388FF, 0), "4H Swing Low Color", group=grp_tf, inline="4h_col")
+
+show2HSwings    = input.bool(false, "Show 2-Hour (120m) Swings Lines on Chart", group=grp_tf, tooltip="Keep disabled for an ultra-clean chart. All levels are monitored cleanly inside the HUD Matrix table.")
+h2LookbackBars  = input.int(330, "2-Hour Swings Lookback (2 Months)", minval=50, maxval=800, group=grp_tf, tooltip="330 2-hour bars covers at least 2 full months of MCX trading.")
+col2HHigh       = input.color(color.new(#00E5FF, 0), "2H Swing High Color", group=grp_tf, inline="2h_col")
+col2HLow        = input.color(color.new(#18FFFF, 0), "2H Swing Low Color", group=grp_tf, inline="2h_col")
+
+show1HSwings    = input.bool(false, "Show 1-Hour (60m) Swings Lines on Chart", group=grp_tf, tooltip="Keep disabled for an ultra-clean chart. All levels are monitored cleanly inside the HUD Matrix table.")
+h1LookbackBars  = input.int(660, "1-Hour Swings Lookback (2 Months)", minval=100, maxval=1500, group=grp_tf, tooltip="660 1-hour bars covers at least 2 full months of MCX trading.")
+col1HHigh       = input.color(color.new(#E040FB, 0), "1H Swing High Color", group=grp_tf, inline="1h_col")
+col1HLow        = input.color(color.new(#EA80FC, 0), "1H Swing Low Color", group=grp_tf, inline="1h_col")
+
+swingCalcMethod = input.string("Recent Structure (Pivots + Horizon Fallback)", "Swing Calculation Method", options=["Recent Structure (Pivots + Horizon Fallback)", "Strict Multi-Month Extremes (Highest/Lowest)"], group=grp_tf, tooltip="Recent Structure tracks the most recent confirmed swing pivot on each timeframe with the multi-month extreme as persistent fallback. Strict Multi-Month Extremes plots the absolute highest high and lowest low over the specified 2M/4M periods.")
+
+swingLineStyle  = input.string("Dotted", "HTF Swing Line Style", options=["Solid", "Dotted", "Dashed"], group=grp_tf)
+swingLineWidth  = input.int(1, "HTF Swing Line Width", minval=1, maxval=4, group=grp_tf)
+showSwingLabels = input.bool(true, "Show HTF Level Price Labels", group=grp_tf)
+
+// --- Section: Previous Key Benchmark Levels ---
+grp_pdr         = "2. Previous Key Benchmark Levels (PDH/PDL, PWH/PWL, PMH/PML)"
+showAdaptiveBench = input.bool(true, "Show Adaptive Benchmark Lines (PDH/PDL, PWH/PWL, PMH/PML)", group=grp_pdr, tooltip="Dynamically marks the primary benchmark High & Low with clean text labels depending on chart timeframe: PDH/PDL for Intraday (<=60m), PWH/PWL for Swings (2H-4H), and PMH/PML for Daily/Macro charts.")
+showPDLevels    = input.bool(false, "Show Previous Day Open & Close (PDO / PDC)", group=grp_pdr, tooltip="Also draw Previous Day Open and Close reference lines.")
+colPDH          = input.color(color.new(#EF5350, 0), "Benchmark High (PDH / PWH / PMH)", group=grp_pdr, inline="pd_hl")
+colPDL          = input.color(color.new(#26A69A, 0), "Benchmark Low (PDL / PWL / PML)", group=grp_pdr, inline="pd_hl")
+colPDO          = input.color(color.new(#B0BEC5, 0), "PDO (Open) Line", group=grp_pdr, inline="pd_oc")
+colPDC          = input.color(color.new(#ECEFF1, 0), "PDC (Close) Line", group=grp_pdr, inline="pd_oc")
+showPWLevels    = input.bool(true,  "Show PWH / PWL Lines (Previous Week High & Low)", group=grp_pdr, tooltip="Displays Previous Week High and Low benchmark levels across all chart timeframes.")
+colPWH          = input.color(color.new(#FF5252, 0), "PWH Line", group=grp_pdr, inline="pw_hl")
+colPWL          = input.color(color.new(#69F0AE, 0), "PWL Line", group=grp_pdr, inline="pw_hl")
+showPMLevels    = input.bool(true,  "Show PMH / PML Lines (Previous Month High & Low)", group=grp_pdr, tooltip="Displays Previous Month High and Low macro benchmark levels.")
+colPMH          = input.color(color.new(#E040FB, 0), "PMH Line", group=grp_pdr, inline="pm_hl")
+colPML          = input.color(color.new(#00E5FF, 0), "PML Line", group=grp_pdr, inline="pm_hl")
+showPWZones     = input.bool(true,  "Show Weekly Supply & Demand Zones (PWH / PWL)", group=grp_pdr, tooltip="Draws dedicated institutional action zones anchored to Previous Week High (Weekly Supply) and Previous Week Low (Weekly Demand).")
+showPMZones     = input.bool(true,  "Show Monthly Supply & Demand Zones (PMH / PML)", group=grp_pdr, tooltip="Draws dedicated macro institutional zones anchored to Previous Month High (Monthly Supply) and Previous Month Low (Monthly Demand).")
+showPDLabels    = input.bool(true, "Show Benchmark Price & Text Labels", group=grp_pdr)
+
+// --- Section: Dual EMA Bull/Bear Trend Cloud (Ribbon) ---
+grp_ema         = "3. Dual Shaded EMA Trend Cloud (Bull/Bear Ribbon)"
+showEmaCloud    = input.bool(true, "Show Dual EMA Trend Cloud", group=grp_ema)
+emaFastLen      = input.int(9, "Fast EMA Length", minval=1, group=grp_ema)
+emaSlowLen      = input.int(21, "Slow EMA Length", minval=1, group=grp_ema)
+emaChopSensPct  = input.float(0.04, "Flat EMA / Chop Sensitivity (%)", minval=0.01, step=0.01, group=grp_ema, tooltip="If EMA fast and slow are within this % distance, ribbon turns Grey (No-Trade).")
+colBullCloud    = input.color(color.new(#00E676, 75), "Bullish Cloud Fill", group=grp_ema, inline="ema_cloud")
+colBearCloud    = input.color(color.new(#FF1744, 75), "Bearish Cloud Fill", group=grp_ema, inline="ema_cloud")
+colNeutralCloud = input.color(color.new(#78909C, 75), "No-Trade / Neutral Cloud Fill (Grey)", group=grp_ema, inline="ema_cloud")
+colFastEma      = input.color(color.new(#00C853, 20), "Fast EMA Line", group=grp_ema, inline="ema_lines")
+colSlowEma      = input.color(color.new(#D50000, 20), "Slow EMA Line", group=grp_ema, inline="ema_lines")
+colNeutralLine  = input.color(color.new(#78909C, 30), "Neutral EMA Line", group=grp_ema, inline="ema_lines")
+filterBreakoutsWithEma = input.bool(true, "Filter Breakouts with EMA Ribbon (Trend Alignment)", group=grp_ema, tooltip="Ensures breakout BUY occurs above Bull Ribbon and breakdown SELL occurs below Bear Ribbon.")
+filterReversalsWithEma = input.bool(false, "Require Trend Ribbon for Demand/Supply Bounces", group=grp_ema, tooltip="Disabled by default: at Demand bottoms, the ribbon is naturally still transitioning. Enabling this delays bottom entries.")
+useMacroEmaFilter       = input.bool(true, "Macro Trend Alignment (200 EMA Baseline)", group=grp_ema, tooltip="Institutions trade retracements strictly in alignment with the higher baseline: Long dips only above 200 EMA, Short rallies only below 200 EMA.")
+macroEmaLen             = input.int(200, "Macro EMA Length", minval=50, maxval=500, group=grp_ema)
+showMacroEma            = input.bool(false, "Show Macro 200 EMA Line on Chart", group=grp_ema)
+colMacroEma             = input.color(color.new(#FFD600, 30), "Macro EMA Line Color", group=grp_ema)
+useDiscountPremiumFilter= input.bool(true, "Auction Equilibrium Rule (Buy in Discount, Sell in Premium)", group=grp_ema, tooltip="Enforces Smart Money rule: Retracement longs must be in the Discount half (< 50% equilibrium), Retracement shorts must be in the Premium half (> 50% equilibrium).")
+useVwapFilter           = input.bool(false, "Intraday Session VWAP Filter (Institutional Fair-Value)", group=grp_ema, tooltip="When enabled on intraday charts, requires price to be above Session VWAP for Longs and below Session VWAP for Shorts.")
+showVwap                = input.bool(false, "Show Session VWAP Line on Chart", group=grp_ema)
+colVwap                 = input.color(color.new(#00E5FF, 30), "Session VWAP Line Color", group=grp_ema)
+
+// --- Section: Trade Signals & RSI Confirmation ---
+grp_sig         = "4. Institutional Entry & Exit Signals"
+enableSignals   = input.bool(true, "Show Buy / Exit Signals on Chart", group=grp_sig)
+enableBreakouts = input.bool(true, "Enable Breakout / Breakdown Signals", group=grp_sig)
+signalIconStyle = input.string("Sleek Arrows with Tooltip (Zero Overlap)", "Signal Icon Style", options=["Sleek Arrows with Tooltip (Zero Overlap)", "Crisp Triangles with Tooltip", "Diamonds with Tooltip", "Modern Text Cards"], group=grp_sig, tooltip="Choose sleek arrows, triangles, or diamonds that sit right on the candle wick without overlapping neighboring bars. Hovering shows full price, SL, and TP details.")
+useVolumeFilter = input.bool(false, "Confirm Breakouts with Volume Surge (Optional)", group=grp_sig, tooltip="Optional: Requires volume to exceed 20-period average. Keep disabled on low-volume futures to avoid missing entries.")
+volSurgeMult    = input.float(1.05, "Breakout Volume Multiplier", minval=0.8, maxval=3.0, step=0.05, group=grp_sig)
+requireSolidBody= input.bool(false, "Require Strict >50% Candle Body", group=grp_sig, tooltip="Optional strict body filter. Keep off for commodities with wicks.")
+minCandleBodyPct= input.float(0.40, "Min Body / Range Ratio", minval=0.2, maxval=0.9, step=0.05, group=grp_sig)
+minBarsBetweenSignals = input.int(4, "Cooldown Bars Between Signals", minval=1, maxval=20, group=grp_sig)
+colorBarsByRegime= input.bool(true, "Color Bars by Regime (Green=Bull, Red=Bear, Grey=No-Trade)", group=grp_sig)
+colNeutralBar   = input.color(#90A4AE, "No-Trade Bar Color (Grey)", group=grp_sig)
+useRsiFilter    = input.bool(true, "Confirm with RSI Momentum Reversal", group=grp_sig)
+rsiLength       = input.int(14, "RSI Length", minval=2, group=grp_sig)
+rsiOversold     = input.int(40, "RSI Bullish Demand Threshold", minval=10, maxval=50, group=grp_sig)
+rsiOverbought   = input.int(60, "RSI Bearish Supply Threshold", minval=50, maxval=90, group=grp_sig)
+requireCandleConfirmation = input.bool(true, "Require Candle Rejection / Engulfing", group=grp_sig)
+filterMiddleTrades  = input.bool(true, "Suppress Signals Inside Middle No-Trade Zone", group=grp_sig)
+filterFakeouts      = input.bool(true, "Institutional Anti-Fakeout Engine (Bull/Bear Traps)", group=grp_sig, tooltip="Strictly eliminates fakeouts: suppresses buy signals when candles have large upper rejection wicks (bull traps), when price is trapped below the slow EMA, or when counter-trending a falling ribbon.")
+maxTrapWickPct      = input.float(0.35, "Max Rejection Wick Ratio (Fakeout Threshold)", minval=0.20, maxval=0.60, step=0.05, group=grp_sig, tooltip="If the upper wick of a potential buy candle exceeds this % of total candle range, it is flagged as an institutional Bull Trap / Fakeout and disqualified.")
+showRetestZone      = input.bool(true, "Show Retest / Pullback Entry Zone (Gold Box)", group=grp_sig, tooltip="After a breakout above Supply or breakdown below Demand, a golden Retest Entry Zone box appears marking where to WAIT for the pullback. Never chase the breakout candle — enter only on the retest with rejection confirmation. SL is placed at the far edge of the zone.")
+
+// --- Section: Universal Market-Agnostic Execution Gates ---
+grp_agnostic        = "5. Universal Market-Agnostic Confluence Gates"
+useHtfStructure     = input.bool(true, "1. Enable HTF Market Structure Gate", group=grp_agnostic, tooltip="Filters trades by Higher Timeframe swing structure (HH/HL vs LH/LL).")
+htfStructureTF      = input.timeframe("D", "   HTF Structure Timeframe", group=grp_agnostic, tooltip="Daily for most markets. Use 4H on crypto 15m charts if preferred.")
+useSessionFilter    = input.bool(true, "2. Enable Session / Liquidity Window Filter", group=grp_agnostic, tooltip="Automatically respects exchange session hours using syminfo.timezone without hardcoded Indian times.")
+sessionMode         = input.string("Auto (Exchange Hours)", "   Session Mode", options=["Auto (Exchange Hours)", "Custom Hours", "24/7 (Crypto)"], group=grp_agnostic, tooltip="Auto dynamically adapts to exchange hours of the current asset (NSE, BSE, MCX, CME, US Equities). Select 24/7 for Crypto.")
+customSessionStr    = input.session("0915-1530", "   Custom Hours (if Custom Selected)", group=grp_agnostic)
+useLiquidityWindows = input.bool(false, "   Restrict to Core Liquidity Sub-Windows", group=grp_agnostic, tooltip="When enabled, requires entries strictly inside primary or secondary liquidity momentum windows.")
+primaryWindowStr    = input.session("0930-1130", "   Primary Liquidity Window", group=grp_agnostic)
+secondaryWindowStr  = input.session("1330-1500", "   Secondary Liquidity Window", group=grp_agnostic)
+useZoneTestSizing   = input.bool(true, "3. Enable Mitigation Test Confirmation Tags", group=grp_agnostic, tooltip="Displays trade confirmation grade: 1st test = Conservative (Half Size), 2nd+ test = Confirmed (Full Size).")
+useVolCvdFilter     = input.bool(true, "4. Enable Volume Surge & CVD Proxy Confirmation", group=grp_agnostic, tooltip="Requires volume > 1.15x 20-SMA and Cumulative Volume Delta alignment. Automatically bypasses for zero-volume spot indices.")
+volSurgeRatio       = input.float(1.15, "   Min Relative Volume Multiplier", minval=0.5, maxval=3.0, step=0.05, group=grp_agnostic)
+newsBlackout        = input.bool(false, "5. NEWS BLACKOUT — Block All New Entries", group=grp_agnostic, tooltip="Turn ON before high-impact economic/macro events (RBI, CPI, NFP, FOMC, Fed Rate, etc.)")
+useVolRegimeGate    = input.bool(true, "6. Enable ATR Volatility Regime Gate", group=grp_agnostic, tooltip="Blocks entries during extreme dead chop (<10th percentile) and extreme volatile panic spikes (>85th percentile).")
+minAtrPctile        = input.float(10.0, "   Min ATR Percentile (Avoid Dead Low Chop)", minval=0.0, maxval=40.0, group=grp_agnostic)
+maxAtrPctile        = input.float(85.0, "   Max ATR Percentile (Avoid Extreme Spikes)", minval=60.0, maxval=100.0, group=grp_agnostic)
+
+// --- Section: Risk-Reward & Exits ---
+grp_exit        = "6. Exits & Risk Management"
+showTargets     = input.bool(true, "Plot Stop-Loss & Take-Profit Targets", group=grp_exit)
+riskRewardRatio = input.float(2.0, "Risk-to-Reward Ratio (TP1)", minval=1.0, step=0.5, group=grp_exit)
+atrBufferMult   = input.float(0.5, "Stop-Loss ATR Buffer Multiplier", minval=0.1, step=0.1, group=grp_exit)
+useTrailingBE   = input.bool(true, "Auto Break-Even (Move SL to Entry at 1:1 R:R)", group=grp_exit, tooltip="Institutional risk engineering: When trade reaches 1:1 R:R (halfway to TP), Stop Loss moves to Entry Price to guarantee a risk-free trade.")
+
+// --- Section: HUD Dashboard ---
+grp_hud         = "7. Institutional HUD Matrix"
+showHUD         = input.bool(true, "Show HTF Matrix Table", group=grp_hud)
+hudPosition     = input.string("Top Right", "Table Position", options=["Top Right", "Bottom Right", "Top Left", "Bottom Left"], group=grp_hud)
+hudLayout       = input.string("Compact (Pro)", "HUD Layout Style", options=["Compact (Pro)", "Ultra-Mini (Pill)", "Full Matrix"], group=grp_hud, tooltip="Compact (Pro): 50% smaller high-density table. Ultra-Mini: 4-row glance. Full Matrix: All 9 rows detailed.")
+hudTextSize     = input.string("Small", "HUD Text Size", options=["Small", "Medium", "Tiny"], group=grp_hud, tooltip="Small provides a clean, compact HUD. Medium gives larger text. Tiny is ultra-compact.")
+
+// --- Section: Alert Settings (Enable / Disable per group) ---
+grp_alert       = "8. Alert Notifications"
+alertOnEntry    = input.bool(true,  "🟢🔴  Entry Signals (BUY / SELL)",        group=grp_alert, tooltip="Fires ONE alert per entry. The message auto-shows setup type: Trend Start, Breakout, Retest, Pullback, or Continuation. Ideal for Telegram / Webhook.")
+alertOnExit     = input.bool(true,  "🎯🛑  Exit Alerts (TP / SL Hit)",          group=grp_alert, tooltip="Fires when Take Profit or Stop Loss is hit. Separate alerts for Long and Short.")
+alertOnBE       = input.bool(true,  "🛡️    Break-Even Activated",               group=grp_alert, tooltip="Fires once when the system auto-moves SL to entry price (trade is now risk-free).")
+alertOnZone     = input.bool(true,  "📦   Zone Entry (Demand / Supply Touch)",  group=grp_alert, tooltip="Early warning: fires the moment price first enters an active Demand or Supply zone. Wait for confirmation before acting.")
+alertOnBreak    = input.bool(true,  "🚀⬇️  Breakout / Breakdown",               group=grp_alert, tooltip="Fires on a confirmed candle close above Supply (Breakout) or below Demand (Breakdown). Retest entry opportunity follows.")
+alertOnTrend    = input.bool(true,  "📈📉  Trend Regime Flip (Bull / Bear)",    group=grp_alert, tooltip="Fires when EMA Cloud flips from Bullish to Bearish or vice versa — marks a macro regime change.")
+alertOnNews     = input.bool(true,  "⚠️    News Shock Emergency Exit",          group=grp_alert, tooltip="Fires when a structural failure / spike forces an emergency close of an active trade.")
+
+// Helper: Line Style
+getLineStyle(string styleStr) =>
+    styleStr == "Solid" ? line.style_solid : styleStr == "Dashed" ? line.style_dashed : line.style_dotted
+
+line_style = getLineStyle(swingLineStyle)
+
+//=============================================================================
+// Auto-detect Options Contract & Expiry Mode (Strict detection to prevent false positives on Stocks/Futures)
+isOptionSymbol  = (syminfo.type == "option" or 
+     str.contains(str.lower(syminfo.tickerid), "call") or 
+     str.contains(str.lower(syminfo.tickerid), "put") or 
+     str.contains(str.lower(syminfo.tickerid), " ce") or 
+     str.contains(str.lower(syminfo.tickerid), " pe") or 
+     str.endswith(str.lower(syminfo.tickerid), "ce") or 
+     str.endswith(str.lower(syminfo.tickerid), "pe") or 
+     str.contains(str.lower(syminfo.description), " option") or 
+     str.contains(str.lower(syminfo.description), " call") or 
+     str.contains(str.lower(syminfo.description), " put"))
+isOptionActive  = instrumentMode == "Options Contract (Month/Expiry Wise)" or (instrumentMode == "Auto Detect" and isOptionSymbol)
+
+//=============================================================================
+// 2. INSTITUTIONAL MULTI-TIMEFRAME ADAPTIVE ENGINE (4x - 6x ELDER RULE)
+//=============================================================================
+// Dynamically detects chart timeframe and shifts HTF references upward:
+// Tier 1 (Intraday <= 15m): 1H, 2H, 4H, Daily (PDH/PDL, PWH/PWL)
+// Tier 2 (Hourly 30m - 1H): 2H, 4H, Daily, Weekly (PDH/PDL, PWH/PWL)
+// Tier 3 (Swing 2H - 4H)  : Daily, Weekly, Monthly (PDH/PDL, PWH/PWL)
+// Tier 4 (Macro Daily+)   : Weekly, Monthly, Yearly (PWH/PWL, PMH/PML)
+//=============================================================================
+
+chartMinutes = timeframe.isdaily ? 1440 : timeframe.isweekly ? 10080 : timeframe.ismonthly ? 43200 : timeframe.isminutes ? timeframe.multiplier : (timeframe.isseconds ? 1 : 15)
+
+isTier1 = chartMinutes <= 15
+isTier2 = chartMinutes > 15 and chartMinutes <= 60
+isTier3 = chartMinutes > 60 and chartMinutes <= 240
+isTier4 = chartMinutes > 240
+
+// Timeframe Lookbacks: Options bounded to expiry horizon, Stocks/Futures use multi-month settings
+effDailyBars  = isOptionActive ? 22 : dailyLookbackBars
+effWeeklyBars = isOptionActive ? 8  : weeklyLookbackBars
+effMonthlyBars= isOptionActive ? 3  : monthlyLookbackBars
+effH4Bars     = isOptionActive ? 25 : h4LookbackBars
+effH2Bars     = isOptionActive ? 35 : h2LookbackBars
+effH1Bars     = isOptionActive ? 45 : h1LookbackBars
+
+// --- HTF Benchmark Range Data (Previous Day, Previous Week, Previous Month) ---
+// Pre-fetching all 3 fixed benchmark horizons via consolidated security tuples
+[pd_open, pd_high, pd_low, pd_close, pd_time] = request.security(syminfo.tickerid, "D", [open[1], high[1], low[1], close[1], time[1]], lookahead=barmerge.lookahead_off)
+[pw_open, pw_high, pw_low, pw_close, pw_time] = request.security(syminfo.tickerid, "W", [open[1], high[1], low[1], close[1], time[1]], lookahead=barmerge.lookahead_off)
+[pm_open, pm_high, pm_low, pm_close, pm_time] = request.security(syminfo.tickerid, "M", [open[1], high[1], low[1], close[1], time[1]], lookahead=barmerge.lookahead_off)
+
+// Chart ATR & Local Fallbacks (Normalized to 15m so MTF zones remain identical across 5m and 15m)
+rawChartAtr = ta.atr(14)
+htfAtr15    = request.security(syminfo.tickerid, "15", ta.atr(14)[1], lookahead=barmerge.lookahead_off)
+currentAtr  = (timeframe.isintraday and (timeframe.isseconds or timeframe.multiplier < 15)) ? nz(htfAtr15, rawChartAtr) : rawChartAtr
+atrZonePad   = currentAtr * zoneHeightMult
+maxClustDist = currentAtr * confluenceAtrMax
+priceFmt    = close >= 1000 ? "#.#" : "#.##"
+localHighFallback = ta.highest(high, 20)
+localLowFallback  = ta.lowest(low, 20)
+
+// --- HTF Swings Pre-fetching (Consolidated tuples to stay well under TV limit) ---
+[m_high_fallback, m_low_fallback, m_ph_raw, m_pl_raw] = request.security(syminfo.tickerid, "M", [ta.highest(high, effMonthlyBars)[1], ta.lowest(low, effMonthlyBars)[1], ta.pivothigh(high, 2, 2)[1], ta.pivotlow(low, 2, 2)[1]], lookahead=barmerge.lookahead_off)
+[w_high_fallback, w_low_fallback, w_ph_raw, w_pl_raw] = request.security(syminfo.tickerid, "W", [ta.highest(high, effWeeklyBars)[1], ta.lowest(low, effWeeklyBars)[1], ta.pivothigh(high, 2, 2)[1], ta.pivotlow(low, 2, 2)[1]], lookahead=barmerge.lookahead_off)
+[d_high_fallback, d_low_fallback, d_ph_raw, d_pl_raw] = request.security(syminfo.tickerid, "D", [ta.highest(high, effDailyBars)[1], ta.lowest(low, effDailyBars)[1], ta.pivothigh(high, 2, 2)[1], ta.pivotlow(low, 2, 2)[1]], lookahead=barmerge.lookahead_off)
+[h4_high_fallback, h4_low_fallback, h4_ph_raw, h4_pl_raw] = request.security(syminfo.tickerid, "240", [ta.highest(high, effH4Bars)[1], ta.lowest(low, effH4Bars)[1], ta.pivothigh(high, 2, 2)[1], ta.pivotlow(low, 2, 2)[1]], lookahead=barmerge.lookahead_off)
+[h2_high_fallback, h2_low_fallback, h2_ph_raw, h2_pl_raw] = request.security(syminfo.tickerid, "120", [ta.highest(high, effH2Bars)[1], ta.lowest(low, effH2Bars)[1], ta.pivothigh(high, 2, 2)[1], ta.pivotlow(low, 2, 2)[1]], lookahead=barmerge.lookahead_off)
+[h1_high_fallback, h1_low_fallback, h1_ph_raw, h1_pl_raw] = request.security(syminfo.tickerid, "60", [ta.highest(high, effH1Bars)[1], ta.lowest(low, effH1Bars)[1], ta.pivothigh(high, 2, 2)[1], ta.pivotlow(low, 2, 2)[1]], lookahead=barmerge.lookahead_off)
+
+// HTF Structure Security Tuple (Universal Market Structure HH/HL vs LH/LL)
+[htfHigh_raw, htfLow_raw, htfPh_raw, htfPl_raw] = request.security(syminfo.tickerid, htfStructureTF, [high, low, ta.pivothigh(high, 2, 2)[1], ta.pivotlow(low, 2, 2)[1]], lookahead=barmerge.lookahead_off)
+
+var float lastHtfSwingHigh = na
+var float lastHtfSwingLow  = na
+var int   structureBias    = 0   // 1 = bullish HH/HL, -1 = bearish LH/LL, 0 = unclear
+
+if not na(htfPh_raw)
+    if not na(lastHtfSwingHigh) and htfPh_raw > lastHtfSwingHigh
+        structureBias := 1
+    else if not na(lastHtfSwingHigh) and htfPh_raw < lastHtfSwingHigh
+        structureBias := -1
+    lastHtfSwingHigh := htfPh_raw
+
+if not na(htfPl_raw)
+    if not na(lastHtfSwingLow) and htfPl_raw > lastHtfSwingLow
+        structureBias := 1
+    else if not na(lastHtfSwingLow) and htfPl_raw < lastHtfSwingLow
+        structureBias := -1
+    lastHtfSwingLow := htfPl_raw
+
+// Guaranteed Valid Active Swing Levels (Triple-Tier Fallback: Never NaN!)
+var float lastMHigh = na
+var float lastMLow  = na
+if swingCalcMethod == "Strict Multi-Month Extremes (Highest/Lowest)"
+    lastMHigh := not na(m_high_fallback) ? m_high_fallback : localHighFallback
+    lastMLow  := not na(m_low_fallback) ? m_low_fallback : localLowFallback
+else
+    if not na(m_ph_raw)
+        lastMHigh := m_ph_raw
+    if na(lastMHigh) and not na(m_high_fallback)
+        lastMHigh := m_high_fallback
+    if na(lastMHigh)
+        lastMHigh := localHighFallback
+    if not na(m_pl_raw)
+        lastMLow := m_pl_raw
+    if na(lastMLow) and not na(m_low_fallback)
+        lastMLow := m_low_fallback
+    if na(lastMLow)
+        lastMLow := localLowFallback
+
+var float lastWHigh = na
+var float lastWLow  = na
+if swingCalcMethod == "Strict Multi-Month Extremes (Highest/Lowest)"
+    lastWHigh := not na(w_high_fallback) ? w_high_fallback : localHighFallback
+    lastWLow  := not na(w_low_fallback) ? w_low_fallback : localLowFallback
+else
+    if not na(w_ph_raw)
+        lastWHigh := w_ph_raw
+    if na(lastWHigh) and not na(w_high_fallback)
+        lastWHigh := w_high_fallback
+    if na(lastWHigh)
+        lastWHigh := localHighFallback
+    if not na(w_pl_raw)
+        lastWLow := w_pl_raw
+    if na(lastWLow) and not na(w_low_fallback)
+        lastWLow := w_low_fallback
+    if na(lastWLow)
+        lastWLow := localLowFallback
+
+var float lastDHigh = na
+var float lastDLow  = na
+if swingCalcMethod == "Strict Multi-Month Extremes (Highest/Lowest)"
+    lastDHigh := not na(d_high_fallback) ? d_high_fallback : localHighFallback
+    lastDLow  := not na(d_low_fallback) ? d_low_fallback : localLowFallback
+else
+    if not na(d_ph_raw)
+        lastDHigh := d_ph_raw
+    if na(lastDHigh) and not na(d_high_fallback)
+        lastDHigh := d_high_fallback
+    if na(lastDHigh)
+        lastDHigh := localHighFallback
+    if not na(d_pl_raw)
+        lastDLow := d_pl_raw
+    if na(lastDLow) and not na(d_low_fallback)
+        lastDLow := d_low_fallback
+    if na(lastDLow)
+        lastDLow := localLowFallback
+
+var float last4HHigh = na
+var float last4HLow  = na
+if swingCalcMethod == "Strict Multi-Month Extremes (Highest/Lowest)"
+    last4HHigh := not na(h4_high_fallback) ? h4_high_fallback : localHighFallback
+    last4HLow  := not na(h4_low_fallback) ? h4_low_fallback : localLowFallback
+else
+    if not na(h4_ph_raw)
+        last4HHigh := h4_ph_raw
+    if na(last4HHigh) and not na(h4_high_fallback)
+        last4HHigh := h4_high_fallback
+    if na(last4HHigh)
+        last4HHigh := localHighFallback
+    if not na(h4_pl_raw)
+        last4HLow := h4_pl_raw
+    if na(last4HLow) and not na(h4_low_fallback)
+        last4HLow := h4_low_fallback
+    if na(last4HLow)
+        last4HLow := localLowFallback
+
+var float last2HHigh = na
+var float last2HLow  = na
+if swingCalcMethod == "Strict Multi-Month Extremes (Highest/Lowest)"
+    last2HHigh := not na(h2_high_fallback) ? h2_high_fallback : localHighFallback
+    last2HLow  := not na(h2_low_fallback) ? h2_low_fallback : localLowFallback
+else
+    if not na(h2_ph_raw)
+        last2HHigh := h2_ph_raw
+    if na(last2HHigh) and not na(h2_high_fallback)
+        last2HHigh := h2_high_fallback
+    if na(last2HHigh)
+        last2HHigh := localHighFallback
+    if not na(h2_pl_raw)
+        last2HLow := h2_pl_raw
+    if na(last2HLow) and not na(h2_low_fallback)
+        last2HLow := h2_low_fallback
+    if na(last2HLow)
+        last2HLow := localLowFallback
+
+var float last1HHigh = na
+var float last1HLow  = na
+if swingCalcMethod == "Strict Multi-Month Extremes (Highest/Lowest)"
+    last1HHigh := not na(h1_high_fallback) ? h1_high_fallback : localHighFallback
+    last1HLow  := not na(h1_low_fallback) ? h1_low_fallback : localLowFallback
+else
+    if not na(h1_ph_raw)
+        last1HHigh := h1_ph_raw
+    if na(last1HHigh) and not na(h1_high_fallback)
+        last1HHigh := h1_high_fallback
+    if na(last1HHigh)
+        last1HHigh := localHighFallback
+    if not na(h1_pl_raw)
+        last1HLow := h1_pl_raw
+    if na(last1HLow) and not na(h1_low_fallback)
+        last1HLow := h1_low_fallback
+    if na(last1HLow)
+        last1HLow := localLowFallback
+
+//=============================================================================
+// 3. CLEAN HTF HORIZONTAL SWING LINES (DYNAMIC AUTO-SUPPRESSION)
+//=============================================================================
+
+type SwingLine
+    line lnObj
+    label lbObj
+
+var SwingLine m_hi_line  = SwingLine.new(na, na)
+var SwingLine m_lo_line  = SwingLine.new(na, na)
+var SwingLine w_hi_line  = SwingLine.new(na, na)
+var SwingLine w_lo_line  = SwingLine.new(na, na)
+var SwingLine d_hi_line  = SwingLine.new(na, na)
+var SwingLine d_lo_line  = SwingLine.new(na, na)
+var SwingLine h4_hi_line = SwingLine.new(na, na)
+var SwingLine h4_lo_line = SwingLine.new(na, na)
+var SwingLine h2_hi_line = SwingLine.new(na, na)
+var SwingLine h2_lo_line = SwingLine.new(na, na)
+var SwingLine h1_hi_line = SwingLine.new(na, na)
+var SwingLine h1_lo_line = SwingLine.new(na, na)
+
+// Draw or update clean horizontal lines on chart (void return)
+updateHtfLine(SwingLine sObj, float priceVal, color col, string labelStr, bool show) =>
+    if show and not na(priceVal)
+        if na(sObj.lnObj)
+            sObj.lnObj := line.new(bar_index - 50, priceVal, bar_index + 15, priceVal, color=col, style=line_style, width=swingLineWidth, extend=extend.none)
+            if showSwingLabels
+                sObj.lbObj := label.new(bar_index + 15, priceVal, labelStr + ": " + str.tostring(priceVal, "#.##"), color=color.new(col, 100), textcolor=col, style=label.style_label_left, size=size.tiny)
+            line.set_x2(sObj.lnObj, bar_index + 15)
+        else
+            line.set_xy1(sObj.lnObj, bar_index - 50, priceVal)
+            line.set_xy2(sObj.lnObj, bar_index + 15, priceVal)
+            if not na(sObj.lbObj)
+                label.set_xy(sObj.lbObj, bar_index + 15, priceVal)
+                label.set_text(sObj.lbObj, labelStr + ": " + str.tostring(priceVal, "#.##"))
+            line.set_x2(sObj.lnObj, bar_index + 15)
+        line.delete(na)
+    else
+        line.delete(sObj.lnObj)
+        label.delete(sObj.lbObj)
+        sObj.lnObj := na
+        sObj.lbObj := na
+        line.delete(na)
+
+lblMonthlyHi= isOptionActive ? "[M] High (Exp)" : "[M] High (1Y)"
+lblMonthlyLo= isOptionActive ? "[M] Low (Exp)" : "[M] Low (1Y)"
+lblWeeklyHi = isOptionActive ? "[W] High (Exp)" : "[W] High (1Y)"
+lblWeeklyLo = isOptionActive ? "[W] Low (Exp)" : "[W] Low (1Y)"
+lblDailyHi  = isOptionActive ? "[Month] High" : "[D] High (4M)"
+lblDailyLo  = isOptionActive ? "[Month] Low" : "[D] Low (4M)"
+lbl4HHi     = isOptionActive ? "[4H] High (Exp)" : "[4H] High (2M)"
+lbl4HLo     = isOptionActive ? "[4H] Low (Exp)" : "[4H] Low (2M)"
+lbl2HHi     = isOptionActive ? "[2H] High (Exp)" : "[2H] High (2M)"
+lbl2HLo     = isOptionActive ? "[2H] Low (Exp)" : "[2H] Low (2M)"
+lbl1HHi     = isOptionActive ? "[1H] High (Exp)" : "[1H] High (2M)"
+lbl1HLo     = isOptionActive ? "[1H] Low (Exp)" : "[1H] Low (2M)"
+
+// Auto-suppress lines strictly when chart timeframe is equal to or higher than the line's timeframe!
+updateHtfLine(m_hi_line, lastMHigh, colMonthlyHigh, lblMonthlyHi, showMonthlySwings and chartMinutes < 43200)
+updateHtfLine(m_lo_line, lastMLow, colMonthlyLow, lblMonthlyLo, showMonthlySwings and chartMinutes < 43200)
+updateHtfLine(w_hi_line, lastWHigh, colWeeklyHigh, lblWeeklyHi, showWeeklySwings and chartMinutes < 10080)
+updateHtfLine(w_lo_line, lastWLow, colWeeklyLow, lblWeeklyLo, showWeeklySwings and chartMinutes < 10080)
+updateHtfLine(d_hi_line, lastDHigh, colDailyHigh, lblDailyHi, showDailySwings and chartMinutes < 1440)
+updateHtfLine(d_lo_line, lastDLow, colDailyLow, lblDailyLo, showDailySwings and chartMinutes < 1440)
+updateHtfLine(h4_hi_line, last4HHigh, col4HHigh, lbl4HHi, show4HSwings and chartMinutes < 240)
+updateHtfLine(h4_lo_line, last4HLow, col4HLow, lbl4HLo, show4HSwings and chartMinutes < 240)
+updateHtfLine(h2_hi_line, last2HHigh, col2HHigh, lbl2HHi, show2HSwings and chartMinutes < 120)
+updateHtfLine(h2_lo_line, last2HLow, col2HLow, lbl2HLo, show2HSwings and chartMinutes < 120)
+updateHtfLine(h1_hi_line, last1HHigh, col1HHigh, lbl1HHi, show1HSwings and chartMinutes < 60)
+updateHtfLine(h1_lo_line, last1HLow, col1HLow, lbl1HLo, show1HSwings and chartMinutes < 60)
+
+//=============================================================================
+// 4. INSTITUTIONAL BENCHMARK LEVELS (PDH/PDL vs PWH/PWL)
+//=============================================================================
+
+// Active Benchmark Calibration:
+// Tier 1-2 (Intraday <= 60m): PDH / PDL is primary baseline
+// Tier 3   (Swing 2H - 4H)  : PWH / PWL is primary baseline (Weekly swing reference)
+// Tier 4   (Daily / Macro)  : PMH / PML is primary baseline (Monthly swing reference)
+isBenchDay   = chartMinutes <= 60
+isBenchWeek  = chartMinutes > 60 and chartMinutes <= 240
+isBenchMonth = chartMinutes > 240
+
+benchHigh = isBenchMonth ? pm_high : (isBenchWeek ? pw_high : pd_high)
+benchLow  = isBenchMonth ? pm_low  : (isBenchWeek ? pw_low  : pd_low)
+benchOpen = isBenchMonth ? pm_open : (isBenchWeek ? pw_open : pd_open)
+benchClose= isBenchMonth ? pm_close: (isBenchWeek ? pw_close: pd_close)
+benchName = isBenchMonth ? "PM" : (isBenchWeek ? "PW" : "PD")
+
+var line  benchHighLine  = na
+var line  benchLowLine   = na
+var label benchHighLabel = na
+var label benchLowLabel  = na
+
+var line pdhLine = na
+var line pdlLine = na
+var line pdoLine = na
+var line pdcLine = na
+var label pdhLabel = na
+var label pdlLabel = na
+
+var line pwhLine = na
+var line pwlLine = na
+var label pwhLabel = na
+var label pwlLabel = na
+
+var line pmhLine = na
+var line pmlLine = na
+var label pmhLabel = na
+var label pmlLabel = na
+
+var box pwhZoneBox = na
+var box pwlZoneBox = na
+var box pmhZoneBox = na
+var box pmlZoneBox = na
+
+int chgDayOfMonth = ta.change(dayofmonth)
+int chgTimeD      = ta.change(time("D"))
+int chgTimeW      = ta.change(time("W"))
+int chgTimeM      = ta.change(time("M"))
+
+isNewDay    = timeframe.isintraday and (chgDayOfMonth != 0 or chgTimeD != 0)
+isNewWeek   = chgTimeW != 0
+isNewMonth  = chgTimeM != 0
+isNewPeriod = isBenchMonth ? isNewMonth : (isBenchWeek ? isNewWeek : isNewDay)
+
+var int sessionStartBar = 0
+if isNewPeriod
+    sessionStartBar := bar_index
+else if na(sessionStartBar) or sessionStartBar == 0
+    sessionStartBar := bar_index
+dayStartBar = sessionStartBar
+
+// Equilibrium Middle Zone (35%-65%)
+benchRange = not na(benchHigh) and not na(benchLow) ? (benchHigh - benchLow) : na
+eqTop = not na(benchRange) ? (benchLow + benchRange * 0.65) : na
+eqBottom = not na(benchRange) ? (benchLow + benchRange * 0.35) : na
+inMiddleEqZone = not na(eqTop) and not na(eqBottom) and (close >= eqBottom and close <= eqTop)
+
+// Helper functions to manage benchmark graphics efficiently
+f_syncLine(line curLine, float priceVal, color col, int xStart, int xEnd, string lineStyle, int lineWidth, bool showLine, bool isNew) =>
+    line retLine = curLine
+    if showLine and not na(priceVal)
+        if isNew or na(retLine)
+            line.delete(retLine)
+            retLine := line.new(xStart, priceVal, xEnd, priceVal, color=col, width=lineWidth, style=lineStyle)
+        else
+            line.set_x2(retLine, xEnd)
+            line.set_xy1(retLine, xStart, priceVal)
+            line.set_xy2(retLine, xEnd, priceVal)
+    else
+        line.delete(retLine)
+        retLine := na
+    retLine
+
+f_syncLabel(label curLabel, float priceVal, color col, string prefix, string fmt, int xEnd, bool showLabel, bool isNew) =>
+    label retLabel = curLabel
+    if showLabel and not na(priceVal)
+        if isNew or na(retLabel)
+            label.delete(retLabel)
+            retLabel := label.new(xEnd, priceVal, prefix + str.tostring(priceVal, fmt), color=color.new(#21262D, 20), textcolor=col, style=label.style_label_left, size=size.small)
+        else
+            label.set_x(retLabel, xEnd)
+            label.set_y(retLabel, priceVal)
+            label.set_text(retLabel, prefix + str.tostring(priceVal, fmt))
+    else
+        label.delete(retLabel)
+        retLabel := na
+    retLabel
+
+f_syncZoneBox(box curBox, float topVal, float botVal, color col, string titleText, int xStart, int xEnd, bool showBox, bool valTop) =>
+    box retBox = curBox
+    if showBox and not na(topVal) and not na(botVal)
+        box.delete(retBox)
+        retBox := box.new(left=xStart, top=topVal, right=xEnd, bottom=botVal, border_color=color.new(col, 35), border_width=1, border_style=line.style_dashed, bgcolor=color.new(col, 91), text=titleText, text_size=size.small, text_color=color.new(col, 0), text_halign=text.align_left, text_valign=valTop ? text.align_top : text.align_bottom)
+    else
+        box.delete(retBox)
+        retBox := na
+    retBox
+
+// Dynamic Adaptive Benchmark Lines (PDH/PDL on <=60m, PWH/PWL on 2H-4H, PMH/PML on Daily/Macro)
+int benchXStart = na(sessionStartBar) or sessionStartBar == 0 ? bar_index - 10 : sessionStartBar
+benchHighLine  := f_syncLine(benchHighLine, benchHigh, colPDH, benchXStart, bar_index + 12, line.style_solid, 2, showAdaptiveBench, isNewPeriod)
+benchHighLabel := f_syncLabel(benchHighLabel, benchHigh, colPDH, "🔴 " + benchName + "H: ", priceFmt, bar_index + 12, showAdaptiveBench and showPDLabels, isNewPeriod)
+
+benchLowLine   := f_syncLine(benchLowLine, benchLow, colPDL, benchXStart, bar_index + 12, line.style_solid, 2, showAdaptiveBench, isNewPeriod)
+benchLowLabel  := f_syncLabel(benchLowLabel, benchLow, colPDL, "🟢 " + benchName + "L: ", priceFmt, bar_index + 12, showAdaptiveBench and showPDLabels, isNewPeriod)
+
+// Previous Day Key Lines (PDO / PDC drawn when enabled)
+bool canDrawPDO = showPDLevels and not na(pd_high) and not na(pd_low) and timeframe.isintraday
+pdoLine := f_syncLine(pdoLine, pd_open, colPDO, bar_index, bar_index + 15, line.style_dotted, 1, canDrawPDO, isNewDay)
+pdcLine := f_syncLine(pdcLine, pd_close, colPDC, bar_index, bar_index + 15, line.style_dotted, 1, canDrawPDO, isNewDay)
+
+// Previous Week Key Lines & Weekly Action Zones (PWH / PWL)
+bool canShowSeparatePW = showPWLevels and not isBenchWeek
+bool canShowSeparatePM = showPMLevels and not isBenchMonth
+bool canShowPWZones    = showPWZones and chartMinutes <= 240
+bool canShowPMZones    = showPMZones and chartMinutes <= 1440
+
+int pwStartBar = isNewPeriod or na(sessionStartBar) ? math.max(0, bar_index - 30) : math.max(0, bar_index - 150)
+pwhLine  := f_syncLine(pwhLine, pw_high, colPWH, bar_index - 30, bar_index + 24, line.style_solid, 2, canShowSeparatePW and not na(pw_high), isNewPeriod)
+pwhLabel := f_syncLabel(pwhLabel, pw_high, colPWH, "🔴 PWH: ", priceFmt, bar_index + 24, canShowSeparatePW and not na(pw_high) and showPDLabels, isNewPeriod)
+
+pwlLine  := f_syncLine(pwlLine, pw_low, colPWL, bar_index - 30, bar_index + 24, line.style_solid, 2, canShowSeparatePW and not na(pw_low), isNewPeriod)
+pwlLabel := f_syncLabel(pwlLabel, pw_low, colPWL, "🟢 PWL: ", priceFmt, bar_index + 24, canShowSeparatePW and not na(pw_low) and showPDLabels, isNewPeriod)
+
+int pwLeft = math.max(0, math.max(bar_index - 450, pwStartBar))
+float pwSupTop = not na(pw_high) ? pw_high + (atrZonePad * 0.35) : na
+float pwSupBot = not na(pw_high) ? pw_high - (atrZonePad * 0.35) : na
+float pwDemTop = not na(pw_low)  ? pw_low  + (atrZonePad * 0.35) : na
+float pwDemBot = not na(pw_low)  ? pw_low  - (atrZonePad * 0.35) : na
+string pwhTitle = "🔴 WEEKLY SUPPLY (PWH) [" + str.tostring(pwSupBot, priceFmt) + " - " + str.tostring(pwSupTop, priceFmt) + "]"
+string pwlTitle = "🟢 WEEKLY DEMAND (PWL) [" + str.tostring(pwDemBot, priceFmt) + " - " + str.tostring(pwDemTop, priceFmt) + "]"
+pwhZoneBox := f_syncZoneBox(pwhZoneBox, pwSupTop, pwSupBot, colPWH, pwhTitle, pwLeft, bar_index + 25, canShowPWZones, true)
+pwlZoneBox := f_syncZoneBox(pwlZoneBox, pwDemTop, pwDemBot, colPWL, pwlTitle, pwLeft, bar_index + 25, canShowPWZones, false)
+
+// Previous Month Key Lines & Macro Action Zones (PMH / PML)
+int pmStartBar = isNewPeriod or na(sessionStartBar) ? math.max(0, bar_index - 60) : math.max(0, bar_index - 300)
+pmhLine  := f_syncLine(pmhLine, pm_high, colPMH, bar_index - 60, bar_index + 34, line.style_solid, 2, canShowSeparatePM and not na(pm_high), isNewPeriod)
+pmhLabel := f_syncLabel(pmhLabel, pm_high, colPMH, "🟣 PMH: ", priceFmt, bar_index + 34, canShowSeparatePM and not na(pm_high) and showPDLabels, isNewPeriod)
+
+pmlLine  := f_syncLine(pmlLine, pm_low, colPML, bar_index - 60, bar_index + 34, line.style_solid, 2, canShowSeparatePM and not na(pm_low), isNewPeriod)
+pmlLabel := f_syncLabel(pmlLabel, pm_low, colPML, "🔵 PML: ", priceFmt, bar_index + 34, canShowSeparatePM and not na(pm_low) and showPDLabels, isNewPeriod)
+
+int pmLeft = math.max(0, math.max(bar_index - 450, pmStartBar))
+float pmSupTop = not na(pm_high) ? pm_high + (atrZonePad * 0.45) : na
+float pmSupBot = not na(pm_high) ? pm_high - (atrZonePad * 0.45) : na
+float pmDemTop = not na(pm_low)  ? pm_low  + (atrZonePad * 0.45) : na
+float pmDemBot = not na(pm_low)  ? pm_low  - (atrZonePad * 0.45) : na
+string pmhTitle = "🟣 MONTHLY SUPPLY (PMH) [" + str.tostring(pmSupBot, priceFmt) + " - " + str.tostring(pmSupTop, priceFmt) + "]"
+string pmlTitle = "🔵 MONTHLY DEMAND (PML) [" + str.tostring(pmDemBot, priceFmt) + " - " + str.tostring(pmDemTop, priceFmt) + "]"
+pmhZoneBox := f_syncZoneBox(pmhZoneBox, pmSupTop, pmSupBot, colPMH, pmhTitle, pmLeft, bar_index + 25, canShowPMZones, true)
+pmlZoneBox := f_syncZoneBox(pmlZoneBox, pmDemTop, pmDemBot, colPML, pmlTitle, pmLeft, bar_index + 25, canShowPMZones, false)
+
+//=============================================================================
+// 6. DUAL SHADED EMA TREND CLOUD & NO-TRADE GREY REGIME
+//=============================================================================
+
+
+emaFast = ta.ema(close, emaFastLen)
+emaSlow = ta.ema(close, emaSlowLen)
+macroEma = ta.ema(close, macroEmaLen)
+
+plot(showMacroEma ? macroEma : na, "Macro EMA 200", color=colMacroEma, linewidth=2)
+
+// Flat / Chop detection
+emaDiffPct = close > 0 ? (math.abs(emaFast - emaSlow) / close * 100.0) : 0.0
+isEmaFlat = emaDiffPct < emaChopSensPct
+isMiddleChop = filterMiddleTrades and inMiddleEqZone
+
+// 3 Regimes: Bull (Green), Bear (Red), No-Trade (Grey)
+isEmaNeutral = isEmaFlat or isMiddleChop
+isEmaBull = (emaFast > emaSlow) and not isEmaNeutral
+isEmaBear = (emaFast < emaSlow) and not isEmaNeutral
+
+// Intraday Session VWAP (Institutional Fair-Value Benchmark)
+chartVwap = ta.vwap
+plot(showVwap and timeframe.isintraday ? chartVwap : na, "Session VWAP", color=colVwap, linewidth=2)
+vwapBull = not useVwapFilter or not timeframe.isintraday or close >= chartVwap
+vwapBear = not useVwapFilter or not timeframe.isintraday or close <= chartVwap
+
+// Macro Baseline Trend Direction
+macroTrendBull = (not useMacroEmaFilter or close > macroEma) and vwapBull
+macroTrendBear = (not useMacroEmaFilter or close < macroEma) and vwapBear
+
+cloudColor = isEmaNeutral ? colNeutralCloud : isEmaBull ? colBullCloud : colBearCloud
+lineColor  = isEmaNeutral ? colNeutralLine : isEmaBull ? colFastEma : colSlowEma
+
+p_fast = plot(showEmaCloud ? emaFast : na, "Fast EMA", color=lineColor, linewidth=1)
+p_slow = plot(showEmaCloud ? emaSlow : na, "Slow EMA", color=lineColor, linewidth=1)
+fill(p_fast, p_slow, color=showEmaCloud ? cloudColor : na, title="EMA Trend Cloud Fill")
+
+// Clean Bar Coloring
+barcolor(colorBarsByRegime ? (isEmaNeutral ? colNeutralBar : isEmaBull ? color.green : color.red) : na)
+
+
+//=============================================================================
+// 5. CRYSTAL-CLEAR INSTITUTIONAL BUY & SELL ACTION ZONES (MTF CONFLUENCE)
+//=============================================================================
+// DESIGN: A zone is VALID only when 2 or more timeframe levels (Daily swings,
+// 2H swings, 1H swings, PDH/PDL/PDO/PDC) converge within the ATR cluster
+// window. This eliminates phantom zones placed at lone extremes.
+//=============================================================================
+
+// Volatility-based localized height buffers (defined above with currentAtr)
+
+// --------------------------------------------------------------------------
+// MTF SUPPLY (RESISTANCE) CONFLUENCE CLUSTER
+// Collect ALL valid overhead resistance candidates from every timeframe.
+// Count how many land within the cluster window; require count >= 2.
+// --------------------------------------------------------------------------
+// Track institutional breakdown / breakout unmitigated memory
+var float unmitigatedBrokenLow  = na
+var float unmitigatedBrokenHigh = na
+
+// When demand breaks down below benchmark low:
+if not na(benchLow) and close < benchLow
+    unmitigatedBrokenLow := benchLow
+
+// When supply breaks out above benchmark high:
+if not na(benchHigh) and close > benchHigh
+    unmitigatedBrokenHigh := benchHigh
+
+// Mitigate (clear) only when price decisively closes 1.5 ATR through the broken level (raised from 0.5 to prevent wick-clearing):
+if not na(unmitigatedBrokenLow) and close > unmitigatedBrokenLow + (currentAtr * 1.5)
+    unmitigatedBrokenLow := na
+
+// Mitigate (clear) only when price decisively closes 1.5 ATR through the broken level (raised from 0.5 to prevent wick-clearing):
+if not na(unmitigatedBrokenHigh) and close < unmitigatedBrokenHigh - (currentAtr * 1.5)
+    unmitigatedBrokenHigh := na
+
+// --------------------------------------------------------------------------
+// MTF SUPPLY (RESISTANCE) CONFLUENCE CLUSTER
+// Dynamically collects ONLY levels strictly higher than current chart timeframe!
+// Tolerance buffers: Prevents candidate levels from jittering out of cluster candidate arrays during minor candle tests/wicks
+float resTolerance = currentAtr * 0.40
+float supTolerance = currentAtr * 0.40
+// --------------------------------------------------------------------------
+resLevels = array.new_float(0)
+
+// Active Benchmark Levels (PDH/Open/Close on intraday/hourly, PWH on swing/macro)
+if not na(benchHigh) and benchHigh >= close - resTolerance
+    array.push(resLevels, benchHigh)
+if not na(benchOpen) and benchOpen >= close - resTolerance
+    array.push(resLevels, benchOpen)
+if not na(benchClose) and benchClose >= close - resTolerance
+    array.push(resLevels, benchClose)
+if not na(unmitigatedBrokenLow) and unmitigatedBrokenLow >= close - resTolerance
+    array.push(resLevels, unmitigatedBrokenLow)
+
+// Include levels strictly higher than current chart timeframe:
+if chartMinutes < 60 and not na(last1HHigh) and last1HHigh >= close - resTolerance
+    array.push(resLevels, last1HHigh)
+if chartMinutes < 120 and not na(last2HHigh) and last2HHigh >= close - resTolerance
+    array.push(resLevels, last2HHigh)
+if chartMinutes < 240 and not na(last4HHigh) and last4HHigh >= close - resTolerance
+    array.push(resLevels, last4HHigh)
+if chartMinutes < 1440 and not na(lastDHigh) and lastDHigh >= close - resTolerance and (na(benchHigh) or math.abs(lastDHigh - benchHigh) > (currentAtr * 0.1))
+    array.push(resLevels, lastDHigh)
+if chartMinutes < 10080 and not na(lastWHigh) and lastWHigh >= close - resTolerance
+    array.push(resLevels, lastWHigh)
+if chartMinutes < 43200 and not na(lastMHigh) and lastMHigh >= close - resTolerance
+    array.push(resLevels, lastMHigh)
+// Additional macro confluence: Previous Week High & Previous Month High
+if (showPWLevels or showPWZones or chartMinutes <= 240) and not na(pw_high) and pw_high >= close - resTolerance
+    array.push(resLevels, pw_high)
+if (showPMLevels or showPMZones or chartMinutes >= 60) and not na(pm_high) and pm_high >= close - resTolerance
+    array.push(resLevels, pm_high)
+
+// --------------------------------------------------------------------------
+// MTF DEMAND (SUPPORT) CONFLUENCE CLUSTER
+// --------------------------------------------------------------------------
+supLevels = array.new_float(0)
+
+if not na(benchLow) and benchLow <= close + supTolerance
+    array.push(supLevels, benchLow)
+if not na(benchOpen) and benchOpen <= close + supTolerance
+    array.push(supLevels, benchOpen)
+if not na(benchClose) and benchClose <= close + supTolerance
+    array.push(supLevels, benchClose)
+if not na(unmitigatedBrokenHigh) and unmitigatedBrokenHigh <= close + supTolerance
+    array.push(supLevels, unmitigatedBrokenHigh)
+
+if chartMinutes < 60 and not na(last1HLow) and last1HLow <= close + supTolerance
+    array.push(supLevels, last1HLow)
+if chartMinutes < 120 and not na(last2HLow) and last2HLow <= close + supTolerance
+    array.push(supLevels, last2HLow)
+if chartMinutes < 240 and not na(last4HLow) and last4HLow <= close + supTolerance
+    array.push(supLevels, last4HLow)
+if chartMinutes < 1440 and not na(lastDLow) and lastDLow <= close + supTolerance and (na(benchLow) or math.abs(lastDLow - benchLow) > (currentAtr * 0.1))
+    array.push(supLevels, lastDLow)
+if chartMinutes < 10080 and not na(lastWLow) and lastWLow <= close + supTolerance
+    array.push(supLevels, lastWLow)
+if chartMinutes < 43200 and not na(lastMLow) and lastMLow <= close + supTolerance
+    array.push(supLevels, lastMLow)
+if (showPWLevels or showPWZones or chartMinutes <= 240) and not na(pw_low) and pw_low <= close + supTolerance
+    array.push(supLevels, pw_low)
+if (showPMLevels or showPMZones or chartMinutes >= 60) and not na(pm_low) and pm_low <= close + supTolerance
+    array.push(supLevels, pm_low)
+
+// Helper: find best confluence cluster centre and bounds.
+// Priority: Find valid confluence clusters (cnt >= 2) nearest to current price for Zone 1!
+findConfluenceCluster(float[] lvls, float dist, float refPrice) =>
+    int n = array.size(lvls)
+    float bestCentre = na
+    float bestMin    = na
+    float bestMax    = na
+    int   bestCount  = 0
+    float bestDistFromPrice = 1e10
+    if n >= 2
+        for i = 0 to n - 1
+            float pivot = array.get(lvls, i)
+            int cnt = 0
+            float sumL = 0.0
+            float cMin = pivot
+            float cMax = pivot
+            for j = 0 to n - 1
+                float peer = array.get(lvls, j)
+                if math.abs(peer - pivot) <= dist
+                    cnt  += 1
+                    sumL += peer
+                    cMin := math.min(cMin, peer)
+                    cMax := math.max(cMax, peer)
+            if cnt >= 2
+                float centre = sumL / cnt
+                float distFromPrice = math.abs(centre - refPrice)
+                // Institutional Proximity Rule for Zone 1: Any valid cluster closer to current price is preferred as the immediate ceiling/floor!
+                bool isBetter = na(bestCentre) or (distFromPrice < bestDistFromPrice - (dist * 0.15)) or (math.abs(distFromPrice - bestDistFromPrice) <= (dist * 0.15) and cnt > bestCount)
+                if isBetter
+                    bestCount         := cnt
+                    bestCentre        := centre
+                    bestMin           := cMin
+                    bestMax           := cMax
+                    bestDistFromPrice := distFromPrice
+    [bestCentre, bestMin, bestMax]
+
+[resClusterCentre, resClusterMin, resClusterMax] = findConfluenceCluster(resLevels, maxClustDist, close)
+[supClusterCentre, supClusterMin, supClusterMax] = findConfluenceCluster(supLevels, maxClustDist, close)
+
+// Fallback when confluence < 2: dynamically search the nearest standalone HTF level above/below
+float resStand = na
+if not na(benchHigh) and benchHigh >= close - resTolerance
+    resStand := na(resStand) ? benchHigh : math.min(resStand, benchHigh)
+if not na(benchOpen) and benchOpen >= close - resTolerance
+    resStand := na(resStand) ? benchOpen : math.min(resStand, benchOpen)
+if not na(benchClose) and benchClose >= close - resTolerance
+    resStand := na(resStand) ? benchClose : math.min(resStand, benchClose)
+if not na(unmitigatedBrokenLow) and unmitigatedBrokenLow >= close - resTolerance
+    resStand := na(resStand) ? unmitigatedBrokenLow : math.min(resStand, unmitigatedBrokenLow)
+if chartMinutes < 60 and not na(last1HHigh) and last1HHigh >= close - resTolerance
+    resStand := na(resStand) ? last1HHigh : math.min(resStand, last1HHigh)
+if chartMinutes < 120 and not na(last2HHigh) and last2HHigh >= close - resTolerance
+    resStand := na(resStand) ? last2HHigh : math.min(resStand, last2HHigh)
+if chartMinutes < 240 and not na(last4HHigh) and last4HHigh >= close - resTolerance
+    resStand := na(resStand) ? last4HHigh : math.min(resStand, last4HHigh)
+if chartMinutes < 1440 and not na(lastDHigh) and lastDHigh >= close - resTolerance
+    resStand := na(resStand) ? lastDHigh : math.min(resStand, lastDHigh)
+if chartMinutes < 10080 and not na(lastWHigh) and lastWHigh >= close - resTolerance
+    resStand := na(resStand) ? lastWHigh : math.min(resStand, lastWHigh)
+if chartMinutes < 43200 and not na(lastMHigh) and lastMHigh >= close - resTolerance
+    resStand := na(resStand) ? lastMHigh : math.min(resStand, lastMHigh)
+resNearestStandalone = resStand
+
+float supStand = na
+if not na(benchLow) and benchLow <= close + supTolerance
+    supStand := na(supStand) ? benchLow : math.max(supStand, benchLow)
+if not na(benchOpen) and benchOpen <= close + supTolerance
+    supStand := na(supStand) ? benchOpen : math.max(supStand, benchOpen)
+if not na(benchClose) and benchClose <= close + supTolerance
+    supStand := na(supStand) ? benchClose : math.max(supStand, benchClose)
+if not na(unmitigatedBrokenHigh) and unmitigatedBrokenHigh <= close + supTolerance
+    supStand := na(supStand) ? unmitigatedBrokenHigh : math.max(supStand, unmitigatedBrokenHigh)
+if chartMinutes < 60 and not na(last1HLow) and last1HLow <= close + supTolerance
+    supStand := na(supStand) ? last1HLow : math.max(supStand, last1HLow)
+if chartMinutes < 120 and not na(last2HLow) and last2HLow <= close + supTolerance
+    supStand := na(supStand) ? last2HLow : math.max(supStand, last2HLow)
+if chartMinutes < 240 and not na(last4HLow) and last4HLow <= close + supTolerance
+    supStand := na(supStand) ? last4HLow : math.max(supStand, last4HLow)
+if chartMinutes < 1440 and not na(lastDLow) and lastDLow <= close + supTolerance
+    supStand := na(supStand) ? lastDLow : math.max(supStand, lastDLow)
+if chartMinutes < 10080 and not na(lastWLow) and lastWLow <= close + supTolerance
+    supStand := na(supStand) ? lastWLow : math.max(supStand, lastWLow)
+if chartMinutes < 43200 and not na(lastMLow) and lastMLow <= close + supTolerance
+    supStand := na(supStand) ? lastMLow : math.max(supStand, lastMLow)
+supNearestStandalone = supStand
+
+bool resIsConfluence = not na(resClusterCentre)
+bool supIsConfluence = not na(supClusterCentre)
+
+// Candidate macro structural levels for Tier 4 (Daily/Macro):
+macroResCandidate = not na(lastWHigh) and lastWHigh > close ? lastWHigh : (not na(lastMHigh) and lastMHigh > close ? lastMHigh : na)
+macroSupCandidate = not na(lastWLow) and lastWLow < close ? lastWLow : (not na(lastMLow) and lastMLow < close ? lastMLow : na)
+
+// Candidate swing structural levels for Tier 3 (2H - 4H Swing):
+swingResCandidate = not na(lastDHigh) and lastDHigh > close ? lastDHigh : (not na(lastWHigh) and lastWHigh > close ? lastWHigh : na)
+swingSupCandidate = not na(lastDLow) and lastDLow < close ? lastDLow : (not na(lastWLow) and lastWLow < close ? lastWLow : na)
+
+// Active anchors — prefer confirmed confluence, then standalone fallback
+baseRes = isTier4 ? nz(macroResCandidate, nz(resClusterCentre, nz(resNearestStandalone, localHighFallback))) : (isTier3 ? nz(swingResCandidate, nz(resClusterCentre, nz(resNearestStandalone, localHighFallback))) : nz(resClusterCentre, nz(resNearestStandalone, localHighFallback)))
+baseSup = isTier4 ? nz(macroSupCandidate, nz(supClusterCentre, nz(supNearestStandalone, localLowFallback))) : (isTier3 ? nz(swingSupCandidate, nz(supClusterCentre, nz(supNearestStandalone, localLowFallback))) : nz(supClusterCentre, nz(supNearestStandalone, localLowFallback)))
+
+// Find Next HTF Structural Support Floor Strictly Below Price:
+float nextLowerSup = na
+if not na(unmitigatedBrokenHigh) and unmitigatedBrokenHigh < close
+    nextLowerSup := na(nextLowerSup) ? unmitigatedBrokenHigh : math.max(nextLowerSup, unmitigatedBrokenHigh)
+if chartMinutes < 60 and not na(last1HLow) and last1HLow < close
+    nextLowerSup := na(nextLowerSup) ? last1HLow : math.max(nextLowerSup, last1HLow)
+if chartMinutes < 120 and not na(last2HLow) and last2HLow < close
+    nextLowerSup := na(nextLowerSup) ? last2HLow : math.max(nextLowerSup, last2HLow)
+if chartMinutes < 240 and not na(last4HLow) and last4HLow < close
+    nextLowerSup := na(nextLowerSup) ? last4HLow : math.max(nextLowerSup, last4HLow)
+if chartMinutes < 1440 and not na(lastDLow) and lastDLow < close
+    nextLowerSup := na(nextLowerSup) ? lastDLow : math.max(nextLowerSup, lastDLow)
+if chartMinutes < 10080 and not na(lastWLow) and lastWLow < close
+    nextLowerSup := na(nextLowerSup) ? lastWLow : math.max(nextLowerSup, lastWLow)
+if chartMinutes < 43200 and not na(lastMLow) and lastMLow < close
+    nextLowerSup := na(nextLowerSup) ? lastMLow : math.max(nextLowerSup, lastMLow)
+
+if na(nextLowerSup)
+    nextLowerSup := ta.lowest(low, 20)
+
+// Find Next HTF Structural Resistance Ceiling Strictly Above Price:
+float nextHigherRes = na
+if not na(unmitigatedBrokenLow) and unmitigatedBrokenLow > close
+    nextHigherRes := na(nextHigherRes) ? unmitigatedBrokenLow : math.min(nextHigherRes, unmitigatedBrokenLow)
+if chartMinutes < 60 and not na(last1HHigh) and last1HHigh > close
+    nextHigherRes := na(nextHigherRes) ? last1HHigh : math.min(nextHigherRes, last1HHigh)
+if chartMinutes < 120 and not na(last2HHigh) and last2HHigh > close
+    nextHigherRes := na(nextHigherRes) ? last2HHigh : math.min(nextHigherRes, last2HHigh)
+if chartMinutes < 240 and not na(last4HHigh) and last4HHigh > close
+    nextHigherRes := na(nextHigherRes) ? last4HHigh : math.min(nextHigherRes, last4HHigh)
+if chartMinutes < 1440 and not na(lastDHigh) and lastDHigh > close
+    nextHigherRes := na(nextHigherRes) ? lastDHigh : math.min(nextHigherRes, lastDHigh)
+if chartMinutes < 10080 and not na(lastWHigh) and lastWHigh > close
+    nextHigherRes := na(nextHigherRes) ? lastWHigh : math.min(nextHigherRes, lastWHigh)
+if chartMinutes < 43200 and not na(lastMHigh) and lastMHigh > close
+    nextHigherRes := na(nextHigherRes) ? lastMHigh : math.min(nextHigherRes, lastMHigh)
+
+if na(nextHigherRes)
+    nextHigherRes := ta.highest(high, 20)
+
+// --- Institutional S/R Role Reversal Engine ---
+// FIX: 2-bar consecutive-close latch with structural breakout confirmation.
+// Both flipDownCount and flipUpCount must reach 2 before the flip is committed.
+var int flipDownCount = 0
+var int flipUpCount   = 0
+
+// Persistent active zone bounds (Declared early so role reversal can reference prior bar values)
+var float supplyZoneTop = na
+var float supplyZoneBot = na
+var float demandZoneTop = na
+var float demandZoneBot = na
+
+// Breakdown trigger is anchored to breaking below the true structural support floor
+// and breakout is anchored to breaking above the structural resistance ceiling
+float breakSupFloor = not na(demandZoneBot) ? demandZoneBot : (not na(benchLow) ? benchLow : na)
+float breakResCeil  = not na(supplyZoneTop) ? supplyZoneTop : (not na(benchHigh) ? benchHigh : na)
+
+if not na(breakSupFloor) and close < breakSupFloor - (currentAtr * 0.15)
+    flipDownCount += 1
+    flipUpCount   := 0
+else if not na(breakResCeil) and close > breakResCeil + (currentAtr * 0.15)
+    flipUpCount   += 1
+    flipDownCount := 0
+else if not na(breakSupFloor) and not na(breakResCeil) and close >= breakSupFloor and close <= breakResCeil
+    flipDownCount := 0
+    flipUpCount   := 0
+
+bool isFlipDown = flipDownCount >= 2
+bool isFlipUp   = flipUpCount   >= 2
+
+float activeSupAnchor = na
+float activeResAnchor = na
+float activeResMin    = na
+float activeResMax    = na
+float activeSupMin    = na
+float activeSupMax    = na
+string supRoleTag     = ""
+string resRoleTag     = ""
+
+if isFlipDown
+    // 🔴 DEMAND BREAKDOWN CONFIRMED (2 consecutive closes below benchLow):
+    // 1. Broken Demand / Benchmark Low flips into Active Overhead Supply (Role Reversal!)
+    activeResAnchor := benchLow
+    activeResMin    := not na(resClusterMin) and math.abs(benchLow - nz(resClusterCentre, benchLow)) <= maxClustDist ? math.min(benchLow, resClusterMin) : benchLow
+    activeResMax    := not na(resClusterMax) and math.abs(benchLow - nz(resClusterCentre, benchLow)) <= maxClustDist ? math.max(benchLow, resClusterMax) : benchLow
+    resRoleTag      := " (FLIPPED " + benchName + "L)"
+    // 2. New Demand Zone is calculated at next HTF structural support below price
+    activeSupAnchor := nextLowerSup
+    activeSupMin    := not na(supClusterMin) and math.abs(nextLowerSup - nz(supClusterCentre, nextLowerSup)) <= maxClustDist ? math.min(nextLowerSup, supClusterMin) : nextLowerSup
+    activeSupMax    := not na(supClusterMax) and math.abs(nextLowerSup - nz(supClusterCentre, nextLowerSup)) <= maxClustDist ? math.max(nextLowerSup, supClusterMax) : nextLowerSup
+    supRoleTag      := " (NEXT SUPPORT)"
+
+else if isFlipUp
+    // 🟢 SUPPLY BREAKOUT CONFIRMED (2 consecutive closes above benchHigh):
+    // 1. Broken Supply / Benchmark High flips into Active Underlying Demand (Role Reversal!)
+    activeSupAnchor := benchHigh
+    activeSupMin    := not na(supClusterMin) and math.abs(benchHigh - nz(supClusterCentre, benchHigh)) <= maxClustDist ? math.min(benchHigh, supClusterMin) : benchHigh
+    activeSupMax    := not na(supClusterMax) and math.abs(benchHigh - nz(supClusterCentre, benchHigh)) <= maxClustDist ? math.max(benchHigh, supClusterMax) : benchHigh
+    supRoleTag      := " (FLIPPED " + benchName + "H)"
+    // 2. New Supply Zone is calculated at next HTF structural resistance above price
+    activeResAnchor := nextHigherRes
+    activeResMin    := not na(resClusterMin) and math.abs(nextHigherRes - nz(resClusterCentre, nextHigherRes)) <= maxClustDist ? math.min(nextHigherRes, resClusterMin) : nextHigherRes
+    activeResMax    := not na(resClusterMax) and math.abs(nextHigherRes - nz(resClusterCentre, nextHigherRes)) <= maxClustDist ? math.max(nextHigherRes, resClusterMax) : nextHigherRes
+    resRoleTag      := " (NEXT RESISTANCE)"
+
+else
+    // ⚪ NORMAL RANGE BOUND (price between benchLow and benchHigh, or only 1 bar close outside):
+    // Supply is overhead confluence cluster (or standalone fallback)
+    // Demand is underlying confluence cluster (or standalone fallback)
+    activeResAnchor := baseRes
+    activeSupAnchor := baseSup
+    activeResMin    := isTier4 and not na(macroResCandidate) ? macroResCandidate : (isTier3 and not na(swingResCandidate) ? swingResCandidate : (not na(resClusterMin) ? resClusterMin : baseRes))
+    activeResMax    := isTier4 and not na(macroResCandidate) ? macroResCandidate : (isTier3 and not na(swingResCandidate) ? swingResCandidate : (not na(resClusterMax) ? resClusterMax : baseRes))
+    activeSupMin    := isTier4 and not na(macroSupCandidate) ? macroSupCandidate : (isTier3 and not na(swingSupCandidate) ? swingSupCandidate : (not na(supClusterMin) ? supClusterMin : baseSup))
+    activeSupMax    := isTier4 and not na(macroSupCandidate) ? macroSupCandidate : (isTier3 and not na(swingSupCandidate) ? swingSupCandidate : (not na(supClusterMax) ? supClusterMax : baseSup))
+    resRoleTag      := not na(unmitigatedBrokenLow) and math.abs(baseRes - unmitigatedBrokenLow) <= (currentAtr * 0.75) ? " (FLIPPED DEMAND)" : (isTier4 ? " (MACRO PEAK)" : isTier3 ? " (SWING PEAK)" : (resIsConfluence ? " (MTF CONF)" : " (1-TF)"))
+    supRoleTag      := not na(unmitigatedBrokenHigh) and math.abs(baseSup - unmitigatedBrokenHigh) <= (currentAtr * 0.75) ? " (FLIPPED SUPPLY)" : (isTier4 ? " (MACRO BASE)" : isTier3 ? " (SWING BASE)" : (supIsConfluence ? " (MTF CONF)" : " (1-TF)"))
+
+// Active Anchors
+resAnchor = activeResAnchor
+supAnchor = activeSupAnchor
+
+// --- Track Zone Creation Origin (Anchor to structural level changes) ---
+var int demZoneStartBar = na
+var int supZoneStartBar = na
+var float prevDemAnchor = na
+var float prevSupAnchor = na
+
+var int supTouchBar = na
+var int demTouchBar = na
+
+resetPeriod = (isTier4 or isTier3) ? false : isNewPeriod
+
+// FIX: Require anchor to move more than 0.45 ATR before triggering zone recalculation.
+// This prevents the zone from jittering when price is oscillating near a level.
+bool demAnchorChanged = math.abs(nz(supAnchor, 0.0) - nz(prevDemAnchor, supAnchor)) > (currentAtr * 0.45)
+bool supAnchorChanged = math.abs(nz(resAnchor, 0.0) - nz(prevSupAnchor, resAnchor)) > (currentAtr * 0.45)
+
+bool prevFlipDown    = bar_index > 0 ? isFlipDown[1] : false
+bool prevFlipUp      = bar_index > 0 ? isFlipUp[1] : false
+bool justFlippedDown = isFlipDown and not prevFlipDown
+bool justFlippedUp   = isFlipUp and not prevFlipUp
+
+if resetPeriod or supAnchorChanged or justFlippedDown or justFlippedUp
+    supTouchBar := na
+if resetPeriod or demAnchorChanged or justFlippedDown or justFlippedUp
+    demTouchBar := na
+
+if na(demZoneStartBar) or resetPeriod or demAnchorChanged or justFlippedDown or justFlippedUp
+    demZoneStartBar := bar_index
+    prevDemAnchor   := supAnchor
+
+if na(supZoneStartBar) or resetPeriod or supAnchorChanged or justFlippedDown or justFlippedUp
+    supZoneStartBar := bar_index
+    prevSupAnchor   := resAnchor
+
+// ---------------------------------------------------------------------------
+// ZONE BOUNDS — Pinpoint Institutional Origin Pivot Candle Snapping
+// STABILIZATION ENGINE: Lock zone boundaries in persistent var variables.
+// Zones NEVER drift, expand, contract, or twitch with normal candle moves!
+// They only update on structural resets (new day, anchor break, flip, or HTF pivot).
+// ---------------------------------------------------------------------------
+var float lockedSupplyTop = na
+var float lockedSupplyBot = na
+var float lockedDemandTop = na
+var float lockedDemandBot = na
+var int   bestSupplyK     = na
+var int   bestDemandK     = na
+
+bool htfPhChanged = not na(htfPh_raw) and ta.change(htfPh_raw) != 0
+bool htfPlChanged = not na(htfPl_raw) and ta.change(htfPl_raw) != 0
+
+bool needSupLock = na(lockedSupplyTop) or resetPeriod or supAnchorChanged or justFlippedDown or justFlippedUp or htfPhChanged
+bool needDemLock = na(lockedDemandTop) or resetPeriod or demAnchorChanged or justFlippedDown or justFlippedUp or htfPlChanged
+
+float calcZonePad = currentAtr * zoneHeightMult
+
+if needSupLock
+    float initSupTop = math.max(nz(activeResMax, resAnchor), resAnchor) + (calcZonePad * 0.35)
+    float initSupBot = math.min(nz(activeResMin, resAnchor), resAnchor - (calcZonePad * 0.35))
+    float originSupTop = initSupTop
+    float originSupBot = initSupBot
+    float minResDiff   = 1e10
+    int   foundSupK    = na
+
+    // Scan strictly historical confirmed bars (k = 1 to 250) — NEVER the live forming candle k=0!
+    int supScanDepth = math.min(250, bar_index)
+    if supScanDepth >= 1
+        for k = 1 to supScanDepth
+            if high[k] >= initSupBot - (currentAtr * 0.4) and high[k] <= initSupTop + (currentAtr * 0.6)
+                float diff = math.abs(high[k] - nz(activeResMin, resAnchor))
+                if diff < minResDiff
+                    minResDiff := diff
+                    foundSupK  := k
+
+    if not na(foundSupK)
+        bestSupplyK  := foundSupK
+        supTouchBar  := bar_index - foundSupK
+        originSupTop := math.max(initSupTop, high[foundSupK])
+        float cBody  = math.max(open[foundSupK], close[foundSupK])
+        originSupBot := math.min(initSupBot, (high[foundSupK] - cBody) >= (currentAtr * 0.15) ? cBody : high[foundSupK] - (currentAtr * 0.2))
+
+    float maxZoneThick = currentAtr * zoneHeightMult
+    lockedSupplyTop := originSupTop
+    lockedSupplyBot := math.max(originSupBot, lockedSupplyTop - maxZoneThick)
+
+if needDemLock
+    float initDemTop = math.max(nz(activeSupMax, supAnchor), supAnchor + (calcZonePad * 0.35))
+    float initDemBot = math.min(nz(activeSupMin, supAnchor), supAnchor) - (calcZonePad * 0.35)
+    float originDemTop = initDemTop
+    float originDemBot = initDemBot
+    float minSupDiff   = 1e10
+    int   foundDemK    = na
+
+    // Scan strictly historical confirmed bars (k = 1 to 250) — NEVER the live forming candle k=0!
+    int demScanDepth = math.min(250, bar_index)
+    if demScanDepth >= 1
+        for k = 1 to demScanDepth
+            if low[k] <= initDemTop + (currentAtr * 0.4) and low[k] >= initDemBot - (currentAtr * 0.6)
+                float diff = math.abs(low[k] - nz(activeSupMax, supAnchor))
+                if diff < minSupDiff
+                    minSupDiff := diff
+                    foundDemK  := k
+
+    if not na(foundDemK)
+        bestDemandK  := foundDemK
+        demTouchBar  := bar_index - foundDemK
+        originDemBot := math.min(initDemBot, low[foundDemK])
+        float cBody  = math.max(open[foundDemK], close[foundDemK])
+        originDemTop := math.max(initDemTop, (cBody - low[foundDemK]) >= (currentAtr * 0.15) ? cBody : low[foundDemK] + (currentAtr * 0.2))
+
+    float maxZoneThick = currentAtr * zoneHeightMult
+    lockedDemandBot := originDemBot
+    lockedDemandTop := math.min(originDemTop, lockedDemandBot + maxZoneThick)
+
+// Assign locked boundaries firmly to active zones (Guaranteed no shift on normal candles!)
+supplyZoneTop := lockedSupplyTop
+supplyZoneBot := lockedSupplyBot
+demandZoneBot := lockedDemandBot
+demandZoneTop := lockedDemandTop
+
+// Presence in Action Zones & Auction Equilibrium (Declared early for zone visual rendering)
+inBuyZone     = not na(demandZoneTop) and (low <= demandZoneTop and high >= demandZoneBot)
+inSellZone    = not na(supplyZoneBot) and (high >= supplyZoneBot and low <= supplyZoneTop)
+currRangeHigh = not na(supplyZoneTop) ? supplyZoneTop : (not na(benchHigh) ? benchHigh : high)
+currRangeLow  = not na(demandZoneBot) ? demandZoneBot : (not na(benchLow)  ? benchLow  : low)
+eqPrice       = (currRangeHigh + currRangeLow) * 0.5
+isDiscount    = close <= eqPrice
+isPremium     = close >= eqPrice
+
+// Channel Clearance Squeeze Guard: True if distance between Demand Top and Supply Bottom is < 1.5x ATR
+isSqueezeChop = not na(supplyZoneBot) and not na(demandZoneTop) and (math.min(supplyZoneTop, supplyZoneBot) - math.max(demandZoneTop, demandZoneBot) < currentAtr * 1.5)
+
+
+// Secondary / Expansion HTF Structural Levels (Zone 2 Targets if Zone 1 Breaks)
+float res2Target = na
+float supBaseRes = not na(supplyZoneTop) ? math.max(supplyZoneTop, supplyZoneBot) : resAnchor
+// The minimum distance for Zone 2 is strictly above Zone 1 & current price (no artificial PWH floor block)
+minDistRes2 = math.max(close, supBaseRes) + (currentAtr * 1.5)
+
+// Avoid colliding with Weekly PWH box if visible
+f_notNearPW(float lvl, float pwLvl) =>
+    na(lvl) or na(pwLvl) or not canShowPWZones or math.abs(lvl - pwLvl) > (currentAtr * 0.75)
+
+if not na(benchHigh) and benchHigh > minDistRes2 and f_notNearPW(benchHigh, pw_high)
+    res2Target := na(res2Target) ? benchHigh : math.min(res2Target, benchHigh)
+if chartMinutes < 60 and not na(last1HHigh) and last1HHigh > minDistRes2 and f_notNearPW(last1HHigh, pw_high)
+    res2Target := na(res2Target) ? last1HHigh : math.min(res2Target, last1HHigh)
+if chartMinutes < 120 and not na(last2HHigh) and last2HHigh > minDistRes2 and f_notNearPW(last2HHigh, pw_high)
+    res2Target := na(res2Target) ? last2HHigh : math.min(res2Target, last2HHigh)
+if chartMinutes < 240 and not na(last4HHigh) and last4HHigh > minDistRes2 and f_notNearPW(last4HHigh, pw_high)
+    res2Target := na(res2Target) ? last4HHigh : math.min(res2Target, last4HHigh)
+if chartMinutes < 1440 and not na(lastDHigh) and lastDHigh > minDistRes2 and f_notNearPW(lastDHigh, pw_high)
+    res2Target := na(res2Target) ? lastDHigh : math.min(res2Target, lastDHigh)
+if chartMinutes < 10080 and not na(lastWHigh) and lastWHigh > minDistRes2 and f_notNearPW(lastWHigh, pw_high)
+    res2Target := na(res2Target) ? lastWHigh : math.min(res2Target, lastWHigh)
+if chartMinutes < 43200 and not na(lastMHigh) and lastMHigh > minDistRes2 and f_notNearPW(lastMHigh, pw_high)
+    res2Target := na(res2Target) ? lastMHigh : math.min(res2Target, lastMHigh)
+
+res2Anchor = not na(res2Target) ? res2Target : (math.max(close, supBaseRes) + (currentAtr * 3.5))
+
+float sup2Target = na
+float demBaseSup = not na(demandZoneBot) ? math.min(demandZoneTop, demandZoneBot) : supAnchor
+minDistSup2 = math.min(close, demBaseSup) - (currentAtr * 1.5)
+
+if not na(benchLow) and benchLow < minDistSup2 and f_notNearPW(benchLow, pw_low)
+    sup2Target := na(sup2Target) ? benchLow : math.max(sup2Target, benchLow)
+if chartMinutes < 60 and not na(last1HLow) and last1HLow < minDistSup2 and f_notNearPW(last1HLow, pw_low)
+    sup2Target := na(sup2Target) ? last1HLow : math.max(sup2Target, last1HLow)
+if chartMinutes < 120 and not na(last2HLow) and last2HLow < minDistSup2 and f_notNearPW(last2HLow, pw_low)
+    sup2Target := na(sup2Target) ? last2HLow : math.max(sup2Target, last2HLow)
+if chartMinutes < 240 and not na(last4HLow) and last4HLow < minDistSup2 and f_notNearPW(last4HLow, pw_low)
+    sup2Target := na(sup2Target) ? last4HLow : math.max(sup2Target, last4HLow)
+if chartMinutes < 1440 and not na(lastDLow) and lastDLow < minDistSup2 and f_notNearPW(lastDLow, pw_low)
+    sup2Target := na(sup2Target) ? lastDLow : math.max(sup2Target, lastDLow)
+if chartMinutes < 10080 and not na(lastWLow) and lastWLow < minDistSup2 and f_notNearPW(lastWLow, pw_low)
+    sup2Target := na(sup2Target) ? lastWLow : math.max(sup2Target, lastWLow)
+if chartMinutes < 43200 and not na(lastMLow) and lastMLow < minDistSup2 and f_notNearPW(lastMLow, pw_low)
+    sup2Target := na(sup2Target) ? lastMLow : math.max(sup2Target, lastMLow)
+
+sup2Anchor = not na(sup2Target) ? sup2Target : (math.min(close, demBaseSup) - (currentAtr * 3.5))
+
+// Zone 2 Secondary Expansion Levels
+supplyZone2Top = not na(res2Anchor) ? res2Anchor + (atrZonePad * 0.4) : na
+supplyZone2Bot = not na(res2Anchor) ? res2Anchor - (atrZonePad * 0.4) : na
+
+demandZone2Top = not na(sup2Anchor) ? sup2Anchor + (atrZonePad * 0.4) : na
+demandZone2Bot = not na(sup2Anchor) ? sup2Anchor - (atrZonePad * 0.4) : na
+
+
+// Forward-Projected Institutional Action Zones (Anchored firmly, NO SHIFTING with incoming candles!)
+var box buyZoneBox       = na
+var box sellZoneBox      = na
+var box buyZone2Box      = na
+var box sellZone2Box     = na
+var box completedZoneBox = na
+var box demRetraceBox    = na
+var box supRetraceBox    = na
+var float demSL          = na
+var float supSL          = na
+var line  frvpPocLine    = na
+var label frvpPocLabel   = na
+var line  zoneAvwapLine  = na
+var label zoneAvwapLabel = na
+var label avwapDiamond   = na
+var float dynamicPocVal   = na
+var float dynamicAvwapVal = na
+var float avwapSlope      = 0.0
+var float lockedZoneHigh  = na
+var float lockedZoneLow   = na
+var int   lastPocAnchor   = na
+var array<float> volBins  = array.new_float(30, 0.0)
+var box   chopZoneBox     = na
+var line  eqMidLine       = na
+var label eqMidLabel      = na
+var bool  lockedBiasIsBear = false
+var int   lockedAvwapAnchorBar = na
+
+//-----------------------------------------------------------------------------
+// RETEST / PULLBACK ENTRY ZONE TRACKER
+// After a breakout above Supply → zone flips to Demand → mark as Retest BUY zone
+// After a breakdown below Demand → zone flips to Supply → mark as Retest SELL zone
+// Entry ONLY on pullback candle with rejection inside the retest zone. NEVER on break candle.
+//-----------------------------------------------------------------------------
+var bool  waitRetestBuy  = false
+var float retestBuyTop   = na
+var float retestBuyBot   = na
+var float retestBuySL    = na
+var int   retestBuyBar   = na
+
+var bool  waitRetestSell = false
+var float retestSellTop  = na
+var float retestSellBot  = na
+var float retestSellSL   = na
+var int   retestSellBar  = na
+
+var box   retestBuyBox   = na
+var box   retestSellBox  = na
+var line  retestBuySLLine  = na
+var line  retestSellSLLine = na
+
+
+// Completed / Mitigated Zone Detection (Smart UI: Hidden during expansion, revealed when price reverses)
+var float brokenDemTop = na
+var float brokenDemBot = na
+var bool  brokenDemActive = false
+var bool  brokenDemPullbackStarted = false
+
+var float brokenSupTop = na
+var float brokenSupBot = na
+var bool  brokenSupActive = false
+var bool  brokenSupPullbackStarted = false
+
+// When demand breaks down:
+if not na(demandZoneBot) and close < demandZoneBot and not brokenDemActive
+    brokenDemActive := true
+    brokenDemTop    := demandZoneTop
+    brokenDemBot    := demandZoneBot
+    brokenDemPullbackStarted := false
+
+if not na(benchLow) and close < benchLow and not brokenDemActive
+    brokenDemActive := true
+    brokenDemTop    := benchLow + (atrZonePad * 0.4)
+    brokenDemBot    := benchLow - (atrZonePad * 0.4)
+    brokenDemPullbackStarted := false
+
+// When price starts pulling back / reversing from swing low towards broken demand:
+if brokenDemActive and not brokenDemPullbackStarted
+    if (close > low[1] and close > open) or (close > ta.lowest(low, 8) + (currentAtr * 0.5)) or (ta.crossover(close, ta.ema(close, 9)))
+        brokenDemPullbackStarted := true
+
+// When supply breaks out:
+if not na(supplyZoneTop) and close > supplyZoneTop and not brokenSupActive
+    brokenSupActive := true
+    brokenSupTop    := supplyZoneTop
+    brokenSupBot    := supplyZoneBot
+    brokenSupPullbackStarted := false
+
+if not na(benchHigh) and close > benchHigh and not brokenSupActive
+    brokenSupActive := true
+    brokenSupTop    := benchHigh + (atrZonePad * 0.4)
+    brokenSupBot    := benchHigh - (atrZonePad * 0.4)
+    brokenSupPullbackStarted := false
+
+// When price starts pulling back / reversing from swing high towards broken supply:
+if brokenSupActive and not brokenSupPullbackStarted
+    if (close < high[1] and close < open) or (close < ta.highest(high, 8) - (currentAtr * 0.5)) or (ta.crossunder(close, ta.ema(close, 9)))
+        brokenSupPullbackStarted := true
+
+// Invalidation / Mitigation (Only clear if price decisively runs 1.5 ATR past the broken level):
+if brokenDemActive and not na(brokenDemTop) and close > brokenDemTop + (currentAtr * 1.5)
+    brokenDemActive := false
+    brokenDemPullbackStarted := false
+
+if brokenSupActive and not na(brokenSupBot) and close < brokenSupBot - (currentAtr * 1.5)
+    brokenSupActive := false
+    brokenSupPullbackStarted := false
+
+float compTop = na
+float compBot = na
+string compBoxText = ""
+bool hasCompletedZone = false
+
+if brokenDemActive and brokenDemPullbackStarted and not na(brokenDemTop) and not na(brokenDemBot)
+    hasCompletedZone := true
+    compTop     := brokenDemTop
+    compBot     := brokenDemBot
+    compBoxText := (close < math.min(compBot, compTop) ? "⚪ FLIPPED RESISTANCE (BROKEN DEMAND) [" : "⚪ COMPLETED DEMAND [") + str.tostring(math.min(compBot, compTop), priceFmt) + " - " + str.tostring(math.max(compBot, compTop), priceFmt) + "]"
+else if brokenSupActive and brokenSupPullbackStarted and not na(brokenSupTop) and not na(brokenSupBot)
+    hasCompletedZone := true
+    compTop     := brokenSupTop
+    compBot     := brokenSupBot
+    compBoxText := (close > math.max(compBot, compTop) ? "⚪ FLIPPED SUPPORT (BROKEN SUPPLY) [" : "⚪ COMPLETED SUPPLY [") + str.tostring(math.min(compBot, compTop), priceFmt) + " - " + str.tostring(math.max(compBot, compTop), priceFmt) + "]"
+
+demBoxText  = (isTier4 ? "🟢 MACRO DEMAND 1" : isTier3 ? "🟢 SWING DEMAND 1" : "🟢 DEMAND 1") + " [" + str.tostring(math.min(demandZoneBot, demandZoneTop), priceFmt) + " - " + str.tostring(math.max(demandZoneBot, demandZoneTop), priceFmt) + "]"
+supBoxText  = (isTier4 ? "🔴 MACRO SUPPLY 1" : isTier3 ? "🔴 SWING SUPPLY 1" : "🔴 SUPPLY 1") + " [" + str.tostring(math.min(supplyZoneBot, supplyZoneTop), priceFmt) + " - " + str.tostring(math.max(supplyZoneBot, supplyZoneTop), priceFmt) + "]"
+dem2BoxText = "🟢 EXPANSION DEMAND 2 [" + str.tostring(math.min(demandZone2Bot, demandZone2Top), priceFmt) + " - " + str.tostring(math.max(demandZone2Bot, demandZone2Top), priceFmt) + "]"
+sup2BoxText = "🔴 EXPANSION SUPPLY 2 [" + str.tostring(math.min(supplyZone2Bot, supplyZone2Top), priceFmt) + " - " + str.tostring(math.max(supplyZone2Bot, supplyZone2Top), priceFmt) + "]"
+
+// Support full session reach without clipping origin candle
+safeStart = (isTier4 or isTier3) ? math.max(0, bar_index - 120) : math.max(0, math.max(bar_index - 450, nz(dayStartBar, bar_index)))
+rawBuyLeft   = zoneAnchorMode == "Today's Start Candle" ? safeStart : nz(demTouchBar, nz(demZoneStartBar, safeStart))
+rawSellLeft  = zoneAnchorMode == "Today's Start Candle" ? safeStart : nz(supTouchBar, nz(supZoneStartBar, safeStart))
+
+// Ensure left coordinate extends back to origin candle without premature truncation
+buyBoxLeft   = math.max(0, math.max(bar_index - 450, math.min(bar_index, rawBuyLeft)))
+sellBoxLeft  = math.max(0, math.max(bar_index - 450, math.min(bar_index, rawSellLeft)))
+
+// Zone fill transparency: stronger (less transparent) when MTF confluence; lighter for single-TF fallback
+demZoneBgTrans  = supIsConfluence ? 82 : 91
+supZoneBgTrans  = resIsConfluence ? 82 : 91
+
+if showBuySellZones and not na(demandZoneTop) and not na(demandZoneBot) and not na(supplyZoneTop) and not na(supplyZoneBot)
+    box.delete(buyZoneBox)
+    box.delete(sellZoneBox)
+    buyZoneBox  := box.new(left=buyBoxLeft, top=math.max(demandZoneTop, demandZoneBot), right=bar_index + 25, bottom=math.min(demandZoneTop, demandZoneBot), border_color=color.new(#00C853, 30), border_width=1, bgcolor=color.new(#00E676, demZoneBgTrans), text=demBoxText, text_size=size.small, text_color=color.new(#00E676, 0), text_halign=text.align_left, text_valign=text.align_bottom)
+    sellZoneBox := box.new(left=sellBoxLeft, top=math.max(supplyZoneTop, supplyZoneBot), right=bar_index + 25, bottom=math.min(supplyZoneTop, supplyZoneBot), border_color=color.new(#D50000, 30), border_width=1, bgcolor=color.new(#FF1744, supZoneBgTrans), text=supBoxText, text_size=size.small, text_color=color.new(#FF1744, 0), text_halign=text.align_left, text_valign=text.align_top)
+
+    // Check if Zone 2 is genuinely distinct from Zone 1 (prevents duplicate boxes & colliding text)
+    bool sup2IsDistinct = not na(supplyZone2Bot) and not na(supplyZoneTop) and (math.min(supplyZone2Top, supplyZone2Bot) > math.max(supplyZoneTop, supplyZoneBot) + (currentAtr * 1.5))
+    bool dem2IsDistinct = not na(demandZone2Top) and not na(demandZoneBot) and (math.max(demandZone2Top, demandZone2Bot) < math.min(demandZoneTop, demandZoneBot) - (currentAtr * 1.5))
+
+    if showExpansionZones and sup2IsDistinct and not na(supplyZone2Top) and not na(supplyZone2Bot)
+        box.delete(sellZone2Box)
+        sellZone2Box := box.new(left=sellBoxLeft, top=math.max(supplyZone2Top, supplyZone2Bot), right=bar_index + 25, bottom=math.min(supplyZone2Top, supplyZone2Bot), border_color=color.new(#FF5252, 35), border_width=1, border_style=line.style_dashed, bgcolor=color.new(#FF1744, 92), text=sup2BoxText, text_size=size.small, text_color=color.new(#FF8A80, 0), text_halign=text.align_left, text_valign=text.align_top)
+    else
+        box.delete(sellZone2Box)
+        sellZone2Box := na
+
+    if showExpansionZones and dem2IsDistinct and not na(demandZone2Top) and not na(demandZone2Bot)
+        box.delete(buyZone2Box)
+        buyZone2Box := box.new(left=buyBoxLeft, top=math.max(demandZone2Top, demandZone2Bot), right=bar_index + 25, bottom=math.min(demandZone2Top, demandZone2Bot), border_color=color.new(#69F0AE, 35), border_width=1, border_style=line.style_dashed, bgcolor=color.new(#00E676, 92), text=dem2BoxText, text_size=size.small, text_color=color.new(#B9F6CA, 0), text_halign=text.align_left, text_valign=text.align_bottom)
+    else
+        box.delete(buyZone2Box)
+        buyZone2Box := na
+
+    // Suppress Completed Zone if it directly overlaps active Zone 1 or is too far from current price (> 3.5 ATR)
+    bool compOverlapsActiveZone = false
+    if not na(compTop) and not na(supplyZoneTop) and math.abs(compTop - math.max(supplyZoneTop, supplyZoneBot)) < (currentAtr * 0.5)
+        compOverlapsActiveZone := true
+    if not na(compBot) and not na(demandZoneBot) and math.abs(compBot - math.min(demandZoneTop, demandZoneBot)) < (currentAtr * 0.5)
+        compOverlapsActiveZone := true
+
+    bool compNearby = not na(compTop) and not na(compBot) and (math.abs(close - math.min(compTop, compBot)) <= currentAtr * 3.5 or math.abs(close - math.max(compTop, compBot)) <= currentAtr * 3.5)
+
+    if showCompletedZones and hasCompletedZone and not compOverlapsActiveZone and compNearby and not na(compTop) and not na(compBot)
+        box.delete(completedZoneBox)
+        completedZoneBox := box.new(left=sellBoxLeft, top=math.max(compTop, compBot), right=bar_index + 25, bottom=math.min(compTop, compBot), border_color=color.new(#90A4AE, 40), border_width=1, border_style=line.style_dotted, bgcolor=color.new(#37474F, 88), text=compBoxText, text_size=size.small, text_color=color.new(#ECEFF1, 0), text_halign=text.align_left, text_valign=text.align_top)
+    else
+        box.delete(completedZoneBox)
+        completedZoneBox := na
+
+    // --- 5A. STABILIZED INSTITUTIONAL VOLUME POC (FRVP) & ZONE AVWAP ENGINE ---
+    // ROOT CAUSE FIX: The POC was shifting every bar because frvpLookback was a
+    // RELATIVE index (bestSupplyK bars back) that slides +1 with every new candle.
+    // FIX: Lock the lookback to a FIXED absolute origin bar (supZoneStartBar or
+    // demZoneStartBar). The profile window is pinned from zone birth → current bar.
+
+    // 1. Absolute origin bar: prefer the most-recent zone origin.
+    //    supZoneStartBar / demZoneStartBar are updated only when anchor moves > 0.3 ATR (Fix 3).
+    int frvpOriginBar = bar_index - 30
+    if not na(supZoneStartBar) and not na(demZoneStartBar)
+        frvpOriginBar := math.max(supZoneStartBar, demZoneStartBar)
+    else if not na(supZoneStartBar)
+        frvpOriginBar := supZoneStartBar
+    else if not na(demZoneStartBar)
+        frvpOriginBar := demZoneStartBar
+    int frvpLookback = math.min(math.max(bar_index - frvpOriginBar, 15), 120)
+
+    // 2. Structural Grid Bounds — snapshot the zone at zone-birth so the price
+    //    grid never drifts as incoming candles arrive.
+    //    We still use current zone values but clamp them with a stored span.
+    bool pocAnchorChanged = na(lastPocAnchor) or frvpOriginBar != lastPocAnchor
+    if pocAnchorChanged or na(lockedZoneHigh)
+        float baseSupC = not na(supplyZoneTop) ? math.max(supplyZoneTop, supplyZoneBot) : nz(benchHigh, high)
+        float baseDemF = not na(demandZoneBot) ? math.min(demandZoneBot, demandZoneTop) : nz(benchLow,  low)
+        lockedZoneHigh := math.max(baseSupC, baseDemF + currentAtr * 2.0)
+        lockedZoneLow  := math.min(baseDemF, baseSupC - currentAtr * 2.0)
+        lastPocAnchor  := frvpOriginBar
+
+    float zoneHighBound = lockedZoneHigh
+    float zoneLowBound  = lockedZoneLow
+    float zoneSpan      = zoneHighBound - zoneLowBound
+
+    // 3. High-Resolution 30-Bin Grid
+    int pocBinCount = 30
+    array.fill(volBins, 0.0)
+    float pocStep = zoneSpan > 0 ? (zoneSpan / float(pocBinCount)) : currentAtr
+
+    if zoneSpan > 0 and pocStep > 0 and frvpLookback > 0
+        for i = 0 to frvpLookback
+            // Multi-point volume distribution across candle range (hlc3, close, mid)
+            float v = nz(volume[i], 1.0)
+            float p1 = hlc3[i]
+            float p2 = close[i]
+            float p3 = (open[i] + close[i]) * 0.5
+            
+            if p1 >= zoneLowBound and p1 <= zoneHighBound
+                int bIdx1 = int(math.floor((p1 - zoneLowBound) / pocStep))
+                bIdx1 := math.min(math.max(bIdx1, 0), pocBinCount - 1)
+                array.set(volBins, bIdx1, array.get(volBins, bIdx1) + v * 0.50)
+            if p2 >= zoneLowBound and p2 <= zoneHighBound
+                int bIdx2 = int(math.floor((p2 - zoneLowBound) / pocStep))
+                bIdx2 := math.min(math.max(bIdx2, 0), pocBinCount - 1)
+                array.set(volBins, bIdx2, array.get(volBins, bIdx2) + v * 0.25)
+            if p3 >= zoneLowBound and p3 <= zoneHighBound
+                int bIdx3 = int(math.floor((p3 - zoneLowBound) / pocStep))
+                bIdx3 := math.min(math.max(bIdx3, 0), pocBinCount - 1)
+                array.set(volBins, bIdx3, array.get(volBins, bIdx3) + v * 0.25)
+        
+        float maxVol = -1.0
+        int maxBinIdx = 15
+        for b = 0 to pocBinCount - 1
+            float bv = array.get(volBins, b)
+            if bv > maxVol
+                maxVol    := bv
+                maxBinIdx := b
+        
+        // 4. Volume-Weighted Peak Centroid (3-bin weighted average to eliminate discrete bin-jumping)
+        float binCenter = zoneLowBound + (float(maxBinIdx) + 0.5) * pocStep
+        float sumCentroidVol = array.get(volBins, maxBinIdx)
+        float sumCentroidWeighted = binCenter * sumCentroidVol
+        if maxBinIdx > 0
+            float vLeft = array.get(volBins, maxBinIdx - 1)
+            sumCentroidVol += vLeft
+            sumCentroidWeighted += (binCenter - pocStep) * vLeft
+        if maxBinIdx < pocBinCount - 1
+            float vRight = array.get(volBins, maxBinIdx + 1)
+            sumCentroidVol += vRight
+            sumCentroidWeighted += (binCenter + pocStep) * vRight
+        
+        float rawPoc = sumCentroidVol > 0 ? (sumCentroidWeighted / sumCentroidVol) : binCenter
+        
+        // 5. Tightened Hysteresis Anti-Flicker Filter:
+        //    - Blend tightened to 0.95 / 0.05 (was 0.85/0.15) — line moves much slower.
+        //    - Added minimum-move gate: must shift > 0.5 pocStep to update at all.
+        //    - On zone anchor change (pocAnchorChanged), immediately snap to new rawPoc.
+        if na(dynamicPocVal) or pocAnchorChanged
+            dynamicPocVal := rawPoc
+        else
+            float pocDiff = math.abs(rawPoc - dynamicPocVal)
+            if pocDiff >= (pocStep * 0.5)   // minimum meaningful move gate
+                if pocDiff < (pocStep * 2.0)
+                    dynamicPocVal := dynamicPocVal * 0.95 + rawPoc * 0.05  // tightened from 0.85
+                else
+                    dynamicPocVal := rawPoc  // large structural jump: snap immediately
+
+    // Compute Origin-Anchored VWAP (AVWAP) from Active Structural Origin
+    // FIX: Stabilized Bias Latching — prevents rapid toggling between Demand and Supply AVWAP on candle moves around eqPrice
+    if inSellZone or (high >= supplyZoneBot - (currentAtr * 0.25))
+        lockedBiasIsBear := true
+    else if inBuyZone or (low <= demandZoneTop + (currentAtr * 0.25))
+        lockedBiasIsBear := false
+    else if isEmaBear and not isEmaBull
+        lockedBiasIsBear := true
+    else if isEmaBull and not isEmaBear
+        lockedBiasIsBear := false
+    else if bar_index <= 1
+        bool supIsRecent = not na(bestSupplyK) and (na(bestDemandK) or bestSupplyK < bestDemandK)
+        lockedBiasIsBear := supIsRecent or close < eqPrice
+
+    bool isBearBias = lockedBiasIsBear
+
+    // Active Zone Synchronized Origin:
+    // Pinned to stable zone start bar or touch bar; never recalculates a sliding relative window!
+    int targetAnchorBar = isBearBias ? (not na(supTouchBar) ? supTouchBar : (not na(supZoneStartBar) ? supZoneStartBar : bar_index - 30)) : (not na(demTouchBar) ? demTouchBar : (not na(demZoneStartBar) ? demZoneStartBar : bar_index - 30))
+    bool avwapAnchorChanged = na(lockedAvwapAnchorBar) or math.abs(targetAnchorBar - lockedAvwapAnchorBar) > 2
+    if avwapAnchorChanged
+        lockedAvwapAnchorBar := targetAnchorBar
+    
+    int activeAnchorBar = nz(lockedAvwapAnchorBar, bar_index - 30)
+    int activeOriginK   = math.min(math.max(bar_index - activeAnchorBar, 2), 120)
+
+    float sumAvwapVp = 0.0
+    float sumAvwapV  = 0.0
+    for i = 0 to activeOriginK
+        float v = nz(volume[i], 1.0)
+        sumAvwapVp += hlc3[i] * v
+        sumAvwapV  += v
+    float rawCalculatedAvwap = sumAvwapV > 0 ? (sumAvwapVp / sumAvwapV) : (isBearBias ? math.min(supplyZoneTop, supplyZoneBot) : math.max(demandZoneTop, demandZoneBot))
+    
+    // Stabilized Hysteresis Filter: Prevents AVWAP line/tag from twitching on minor candle ticks
+    if na(dynamicAvwapVal) or avwapAnchorChanged
+        dynamicAvwapVal := rawCalculatedAvwap
+    else
+        float avwapDiff = math.abs(rawCalculatedAvwap - dynamicAvwapVal)
+        if avwapDiff >= (currentAtr * 0.08)
+            dynamicAvwapVal := dynamicAvwapVal * 0.90 + rawCalculatedAvwap * 0.10
+
+    float rawDelta = not na(dynamicAvwapVal[1]) ? (dynamicAvwapVal - dynamicAvwapVal[1]) : 0.0
+    float multiDelta = not na(dynamicAvwapVal[3]) ? (dynamicAvwapVal - dynamicAvwapVal[3]) : rawDelta
+    avwapSlope := math.abs(multiDelta) > (currentAtr * 0.02) ? multiDelta : rawDelta
+
+    // Draw / Update Dynamic Fixed Range Volume POC Line & Label (Column 3: bar_index + 40)
+    if showFrvpPoc and not na(dynamicPocVal)
+        line.delete(frvpPocLine)
+        label.delete(frvpPocLabel)
+        int pocLeftBar = bar_index - math.min(frvpLookback, 40)
+        color pocCol   = isBearBias ? colPocBear : colPocBull
+        int pocXEnd    = bar_index + 40
+        
+        frvpPocLine := line.new(
+            x1    = pocLeftBar,
+            y1    = dynamicPocVal,
+            x2    = pocXEnd,
+            y2    = dynamicPocVal,
+            color = pocCol,
+            style = line.style_dashed,
+            width = 2)
+            
+        frvpPocLabel := label.new(
+            x         = pocXEnd,
+            y         = dynamicPocVal,
+            text      = "⚡ POC: " + str.tostring(dynamicPocVal, priceFmt),
+            color     = color.new(pocCol, 20),
+            textcolor = color.white,
+            style     = label.style_label_left,
+            size      = size.small)
+    else
+        line.delete(frvpPocLine)
+        label.delete(frvpPocLabel)
+        frvpPocLine  := na
+        frvpPocLabel := na
+
+    // Draw / Update Zone-Anchored AVWAP Line & Badge (Column 4: bar_index + 54)
+    if showZoneAvwap and not na(dynamicAvwapVal)
+        line.delete(zoneAvwapLine)
+        label.delete(zoneAvwapLabel)
+        label.delete(avwapDiamond)
+        avwapDiamond := na
+        int avwapLeftBar = math.max(0, math.max(bar_index - 50, nz(lockedAvwapAnchorBar, bar_index - 30)))
+        color avwapLineCol = isBearBias ? #EF5350 : #26A69A
+        int avwapXEnd = bar_index + 54
+
+        zoneAvwapLine := line.new(
+            x1    = avwapLeftBar,
+            y1    = dynamicAvwapVal,
+            x2    = avwapXEnd,
+            y2    = dynamicAvwapVal,
+            color = avwapLineCol,
+            style = line.style_dotted,
+            width = 2)
+            
+        // AVWAP dynamic slope & movement direction
+        bool isAvwapUp   = avwapSlope > 0
+        bool isAvwapDown = avwapSlope < 0
+        string avwapDirText = isAvwapUp ? " ◆ UP" : isAvwapDown ? " ◆ DN" : " ◆ FLAT"
+
+        string avwapActualSize = avwapLabelSize == "Large" ? size.large : (avwapLabelSize == "Normal (Prominent)" ? size.normal : size.small)
+        color avwapBgCol       = isBearBias ? color.new(#C62828, 0) : color.new(#2E7D32, 0)
+
+        zoneAvwapLabel := label.new(
+            x         = avwapXEnd,
+            y         = dynamicAvwapVal,
+            text      = "⚓ AVWAP: " + str.tostring(dynamicAvwapVal, priceFmt) + avwapDirText,
+            color     = avwapBgCol,
+            textcolor = color.white,
+            style     = label.style_label_left,
+            size      = avwapActualSize)
+    else
+        line.delete(zoneAvwapLine)
+        label.delete(zoneAvwapLabel)
+        label.delete(avwapDiamond)
+        zoneAvwapLine     := na
+        zoneAvwapLabel    := na
+        avwapDiamond      := na
+        avwapSlope        := 0.0
+
+    // Highlight Dedicated Pullback / Retracement Area inside Active Zones (Suppressed when Squeeze Chop is active)
+    bool canShowRetrace = showRetraceArea and not isSqueezeChop
+    if canShowRetrace
+        bool showDemRetrace = close <= eqPrice or inBuyZone
+        bool showSupRetrace = close > eqPrice or inSellZone
+
+        bool isZoneConsolidating = isEmaNeutral or (ta.highest(high, 5) - ta.lowest(low, 5) < currentAtr * 1.15 and (inBuyZone or inSellZone))
+
+        if showDemRetrace
+            demMid = (math.max(demandZoneTop, demandZoneBot) + math.min(demandZoneTop, demandZoneBot)) * 0.5
+            demSL := math.min(demandZoneTop, demandZoneBot) - (currentAtr * atrBufferMult)
+            box.delete(demRetraceBox)
+            string demRetraceText = "🎯 50% RETRACE 🟢 [BUY] | SL: " + str.tostring(demSL, priceFmt)
+            color demBoxCol = isZoneConsolidating ? #FFA726 : #FFD600
+            demRetraceBox := box.new(left=buyBoxLeft, top=math.max(demandZoneTop, demandZoneBot), right=bar_index + 25, bottom=demMid, border_color=color.new(demBoxCol, 20), border_width=2, border_style=isZoneConsolidating ? line.style_dotted : line.style_dashed, bgcolor=color.new(demBoxCol, 88), text=demRetraceText, text_size=size.small, text_color=color.new(demBoxCol, 0), text_halign=text.align_left, text_valign=text.align_center)
+            box.delete(supRetraceBox)
+            supRetraceBox := na
+        else if showSupRetrace
+            supMid = (math.max(supplyZoneTop, supplyZoneBot) + math.min(supplyZoneTop, supplyZoneBot)) * 0.5
+            supSL := math.max(supplyZoneTop, supplyZoneBot) + (currentAtr * atrBufferMult)
+            box.delete(supRetraceBox)
+            string supRetraceText = "🎯 50% RETRACE 🔻 [SHORT] | SL: " + str.tostring(supSL, priceFmt)
+            color supBoxCol = isZoneConsolidating ? #FFA726 : #FFD600
+            supRetraceBox := box.new(left=sellBoxLeft, top=supMid, right=bar_index + 25, bottom=math.min(supplyZoneTop, supplyZoneBot), border_color=color.new(supBoxCol, 20), border_width=2, border_style=isZoneConsolidating ? line.style_dotted : line.style_dashed, bgcolor=color.new(supBoxCol, 88), text=supRetraceText, text_size=size.small, text_color=color.new(supBoxCol, 0), text_halign=text.align_left, text_valign=text.align_center)
+            box.delete(demRetraceBox)
+            demRetraceBox := na
+    else
+        box.delete(demRetraceBox)
+        box.delete(supRetraceBox)
+        demRetraceBox := na
+        supRetraceBox := na
+
+    // ---------------------------------------------------------------------------
+    // 5C. INSTITUTIONAL EQUILIBRIUM (EQ 50%) LINE & CHOPPY / SIDEWAYS ZONE BOX
+    // ---------------------------------------------------------------------------
+    float sFloor = math.min(supplyZoneTop, supplyZoneBot)
+    float dCeil  = math.max(demandZoneTop, demandZoneBot)
+    
+    // Equilibrium 50% Midpoint Line & Price Tag between Supply & Demand (Column 2: bar_index + 26)
+    float dynamicEq = (sFloor + dCeil) * 0.5
+    if showEquilibriumLine and not na(dynamicEq)
+        line.delete(eqMidLine)
+        label.delete(eqMidLabel)
+        int eqLeftBar = math.min(buyBoxLeft, sellBoxLeft)
+        int eqXEnd    = bar_index + 26
+        eqMidLine := line.new(
+            x1    = eqLeftBar,
+            y1    = dynamicEq,
+            x2    = eqXEnd,
+            y2    = dynamicEq,
+            color = colEqLine,
+            style = line.style_dotted,
+            width = 2)
+        eqMidLabel := label.new(
+            x         = eqXEnd,
+            y         = dynamicEq,
+            text      = "⚖️ EQ: " + str.tostring(dynamicEq, priceFmt),
+            color     = color.new(#21262D, 15),
+            textcolor = colEqLine,
+            style     = label.style_label_left,
+            size      = size.small)
+    else
+        line.delete(eqMidLine)
+        label.delete(eqMidLabel)
+        eqMidLine  := na
+        eqMidLabel := na
+
+    // Dedicated Choppy / Sideways Zone Box (Positioned cleanly on the left edge without candle overlap)
+    bool shouldDrawChop = (showChopZoneBox or showMiddleEqBox) and not na(sFloor) and not na(dCeil) and (sFloor > dCeil)
+    if shouldDrawChop
+        box.delete(chopZoneBox)
+        int chopLeft = math.min(buyBoxLeft, sellBoxLeft)
+        float cTop = na
+        float cBot = na
+        string cText = ""
+        color cBorder = na
+        color cBg = na
+        color cTextCol = na
+
+        if isSqueezeChop
+            // Squeeze Chop Zone: Distance between Demand Top & Supply Bottom is < 1.5 ATR
+            cTop     := sFloor
+            cBot     := dCeil
+            cText    := "⚠️ SQUEEZE CHOP ZONE [" + str.tostring(cBot, priceFmt) + " - " + str.tostring(cTop, priceFmt) + "] (<1.5 ATR | NO TRADE)"
+            cBorder  := color.new(#FFA726, 30)
+            cBg      := color.new(#FFA726, 92)
+            cTextCol := color.new(#FFB74D, 0)
+            chopZoneBox := box.new(left=chopLeft, top=cTop, right=bar_index + 25, bottom=cBot, border_color=cBorder, border_width=1, border_style=line.style_dotted, bgcolor=cBg, text=cText, text_size=size.small, text_color=cTextCol, text_halign=text.align_left, text_valign=text.align_center)
+        else
+            // Standard Middle Equilibrium / Fair Value Balance Band (38.2% - 61.8% Range)
+            float totalSpan = sFloor - dCeil
+            cTop     := dCeil + (totalSpan * 0.62)
+            cBot     := dCeil + (totalSpan * 0.38)
+            cText    := "⚖️ SIDEWAYS / EQUILIBRIUM ZONE [" + str.tostring(cBot, priceFmt) + " - " + str.tostring(cTop, priceFmt) + "] (FAIR-VALUE BALANCE)"
+            cBorder  := color.new(#90A4AE, 35)
+            cBg      := color.new(#37474F, 88)
+            cTextCol := color.new(#CFD8DC, 0)
+            chopZoneBox := box.new(left=chopLeft, top=cTop, right=bar_index + 25, bottom=cBot, border_color=cBorder, border_width=1, border_style=line.style_dotted, bgcolor=cBg, text=cText, text_size=size.small, text_color=cTextCol, text_halign=text.align_left, text_valign=text.align_center)
+    else
+        box.delete(chopZoneBox)
+        chopZoneBox := na
+
+    line.delete(na)
+else
+    box.delete(buyZoneBox)
+    box.delete(sellZoneBox)
+    box.delete(buyZone2Box)
+    box.delete(sellZone2Box)
+    box.delete(completedZoneBox)
+    box.delete(demRetraceBox)
+    box.delete(supRetraceBox)
+    box.delete(chopZoneBox)
+    line.delete(eqMidLine)
+    label.delete(eqMidLabel)
+    line.delete(frvpPocLine)
+    label.delete(frvpPocLabel)
+    line.delete(zoneAvwapLine)
+    label.delete(zoneAvwapLabel)
+    label.delete(avwapDiamond)
+    buyZoneBox       := na
+    sellZoneBox      := na
+    buyZone2Box      := na
+    sellZone2Box     := na
+    completedZoneBox := na
+    demRetraceBox    := na
+    supRetraceBox    := na
+    chopZoneBox      := na
+    eqMidLine        := na
+    eqMidLabel       := na
+    frvpPocLine      := na
+    frvpPocLabel     := na
+    zoneAvwapLine    := na
+    zoneAvwapLabel   := na
+    avwapDiamond     := na
+    line.delete(na)
+
+//=============================================================================
+// 5B. RETEST / PULLBACK ENTRY ZONE ENGINE
+// Institutional rule: NEVER enter on the breakout candle.
+// Wait for price to pull back INTO the broken zone (now flipped role).
+// Golden box = your entry zone. Dashed line = your Stop Loss.
+//=============================================================================
+
+// --- BREAKOUT ABOVE SUPPLY → Activate Retest BUY zone (flipped supply = new demand) ---
+if showRetestZone and not na(supplyZoneTop) and close[1] <= supplyZoneTop and close > supplyZoneTop and not waitRetestBuy
+    // Candle just closed ABOVE supply zone top = breakout confirmed
+    waitRetestBuy  := true
+    retestBuyTop   := supplyZoneTop                            // top of the flipped zone
+    retestBuyBot   := supplyZoneBot                            // bottom of the flipped zone = SL reference
+    retestBuySL    := supplyZoneBot - (currentAtr * atrBufferMult)  // SL below flipped zone bottom
+    retestBuyBar   := bar_index
+    waitRetestSell := false   // cancel any pending sell retest
+
+// --- BREAKDOWN BELOW DEMAND → Activate Retest SELL zone (flipped demand = new supply) ---
+if showRetestZone and not na(demandZoneBot) and close[1] >= demandZoneBot and close < demandZoneBot and not waitRetestSell
+    // Candle just closed BELOW demand zone bottom = breakdown confirmed
+    waitRetestSell  := true
+    retestSellTop   := demandZoneTop                           // top of the flipped zone = SL reference
+    retestSellBot   := demandZoneBot                           // bottom of the flipped zone
+    retestSellSL    := demandZoneTop + (currentAtr * atrBufferMult)  // SL above flipped zone top
+    retestSellBar   := bar_index
+    waitRetestBuy   := false  // cancel any pending buy retest
+
+// --- Cancel retest if price overshoots without retesting (zone is invalid) ---
+if waitRetestBuy and not na(retestBuyTop)
+    if close < retestBuyBot - (currentAtr * 1.5)   // price fell through — false breakout
+        waitRetestBuy := false
+        box.delete(retestBuyBox)
+        line.delete(retestBuySLLine)
+        retestBuyBox    := na
+        retestBuySLLine := na
+
+if waitRetestSell and not na(retestSellBot)
+    if close > retestSellTop + (currentAtr * 1.5)  // price rallied through — false breakdown
+        waitRetestSell := false
+        box.delete(retestSellBox)
+        line.delete(retestSellSLLine)
+        retestSellBox    := na
+        retestSellSLLine := na
+
+// --- Cancel retest once trade is taken (state returns to FLAT means signal fired) ---
+if not waitRetestBuy or not waitRetestSell
+    if bar_index - nz(retestBuyBar, bar_index) > 60
+        waitRetestBuy   := false
+    if bar_index - nz(retestSellBar, bar_index) > 60
+        waitRetestSell  := false
+
+// --- Draw the Retest Entry Zone boxes and SL lines ---
+if showRetestZone and waitRetestBuy and not na(retestBuyTop) and not na(retestBuyBot)
+    box.delete(retestBuyBox)
+    line.delete(retestBuySLLine)
+    retestBuyBox := box.new(
+        left         = bar_index,
+        top          = retestBuyTop,
+        right        = bar_index + 30,
+        bottom       = retestBuyBot,
+        border_color = color.new(#FFD600, 0),
+        border_width = 2,
+        border_style = line.style_dashed,
+        bgcolor      = color.new(#FFD600, 88),
+        text         = "🏹 RETEST BUY ZONE\nWait for pullback here\nSL: " + str.tostring(retestBuySL, "#.##"),
+        text_size    = size.small,
+        text_color   = color.new(#FFD600, 0),
+        text_halign  = text.align_right,
+        text_valign  = text.align_bottom)
+    retestBuySLLine := line.new(
+        x1    = bar_index,
+        y1    = retestBuySL,
+        x2    = bar_index + 30,
+        y2    = retestBuySL,
+        color = color.new(#FF1744, 20),
+        style = line.style_dashed,
+        width = 2)
+else if not waitRetestBuy
+    box.delete(retestBuyBox)
+    line.delete(retestBuySLLine)
+    retestBuyBox    := na
+    retestBuySLLine := na
+
+if showRetestZone and waitRetestSell and not na(retestSellTop) and not na(retestSellBot)
+    box.delete(retestSellBox)
+    line.delete(retestSellSLLine)
+    retestSellBox := box.new(
+        left         = bar_index,
+        top          = retestSellTop,
+        right        = bar_index + 30,
+        bottom       = retestSellBot,
+        border_color = color.new(#FF9800, 0),
+        border_width = 2,
+        border_style = line.style_dashed,
+        bgcolor      = color.new(#FF9800, 88),
+        text         = "🏹 RETEST SELL ZONE\nWait for pullback here\nSL: " + str.tostring(retestSellSL, "#.##"),
+        text_size    = size.small,
+        text_color   = color.new(#FF9800, 0),
+        text_halign  = text.align_right,
+        text_valign  = text.align_top)
+    retestSellSLLine := line.new(
+        x1    = bar_index,
+        y1    = retestSellSL,
+        x2    = bar_index + 30,
+        y2    = retestSellSL,
+        color = color.new(#FF1744, 20),
+        style = line.style_dashed,
+        width = 2)
+else if not waitRetestSell
+    box.delete(retestSellBox)
+    line.delete(retestSellSLLine)
+    retestSellBox    := na
+    retestSellSLLine := na
+
+// --- Retest Entry Signals (triggered ONLY on pullback candle inside the flipped zone) ---
+// Inline candle analysis here (Section 7 vars not declared yet at this point)
+bool retestBuySignal  = false
+bool retestSellSignal = false
+
+_rtCandleRange  = high - low
+_rtCandleBody   = math.abs(close - open)
+_rtUpperWick    = high - math.max(open, close)
+_rtLowerWick    = math.min(open, close) - low
+_rtBullRej      = close > open and (_rtCandleRange > 0 ? (_rtLowerWick / _rtCandleRange) >= 0.3 : false)
+_rtBearRej      = close < open and (_rtCandleRange > 0 ? (_rtUpperWick / _rtCandleRange) >= 0.3 : false)
+_rtIsBullTrap   = filterFakeouts and _rtCandleRange > 0 and (_rtUpperWick / _rtCandleRange > maxTrapWickPct or _rtUpperWick > _rtCandleBody * 1.2 or close < (low + _rtCandleRange * 0.45))
+_rtIsBearTrap   = filterFakeouts and _rtCandleRange > 0 and (_rtLowerWick / _rtCandleRange > maxTrapWickPct or _rtLowerWick > _rtCandleBody * 1.2 or close > (high - _rtCandleRange * 0.45))
+
+if waitRetestBuy and not na(retestBuyTop) and not na(retestBuyBot)
+    inRetestBuyZone = (low <= retestBuyTop and high >= retestBuyBot)
+    if inRetestBuyZone and _rtBullRej and not _rtIsBullTrap
+        retestBuySignal := true
+        waitRetestBuy   := false   // consumed: clear the retest zone
+
+if waitRetestSell and not na(retestSellTop) and not na(retestSellBot)
+    inRetestSellZone = (high >= retestSellBot and low <= retestSellTop)
+    if inRetestSellZone and _rtBearRej and not _rtIsBearTrap
+        retestSellSignal := true
+        waitRetestSell   := false  // consumed
+
+
+//=============================================================================
+// 7. BUY & SELL SIGNALS (ACCURACY-FILTERED DEMAND REVERSAL & BREAKOUT MODES)
+//=============================================================================
+
+rsiVal = ta.rsi(close, rsiLength)
+rsiOversoldReversal  = (rsiVal < rsiOversold or rsiVal[1] < rsiOversold or rsiVal[2] < rsiOversold) and (rsiVal > rsiVal[1])
+rsiOverboughtReversal = (rsiVal > rsiOverbought or rsiVal[1] > rsiOverbought or rsiVal[2] > rsiOverbought) and (rsiVal < rsiVal[1])
+
+// 1. Institutional Volume Confirmation (Optional)
+volSma20 = ta.sma(volume, 20)
+hasValidVolume = not na(volume) and volume > 0 and not na(volSma20) and volSma20 > 0
+volBreakoutConfirmed = useVolumeFilter ? (hasValidVolume ? (volume >= volSma20 * volSurgeMult) : true) : true
+
+// 2. Candle Geometry & Wicks (Declared FIRST so all downstream calculations can use them!)
+candleBody  = math.abs(close - open)
+candleRange = high - low
+candleBodyRatio = candleRange > 0 ? (candleBody / candleRange) : 0.0
+solidBodyConfirmed = requireSolidBody ? (candleBodyRatio >= minCandleBodyPct) : true
+upperWick   = high - math.max(open, close)
+lowerWick   = math.min(open, close) - low
+
+// 3. Auction Market Equilibrium Permissions
+discountLongAllowed = not useDiscountPremiumFilter or isDiscount or inBuyZone
+premiumShortAllowed = not useDiscountPremiumFilter or isPremium  or inSellZone
+
+// 5. Fastest Institutional Confirmation: Candle 1 Rejection Wick (>= 30% of total candle range)
+bullishRejection = close > open and candleRange > 0 and (lowerWick / candleRange >= 0.30 or (close - low) >= candleRange * 0.35)
+bearishRejection = close < open and candleRange > 0 and (upperWick / candleRange >= 0.30 or (high - close) >= candleRange * 0.35)
+bullishConfirmation = requireCandleConfirmation ? bullishRejection : true
+bearishConfirmation = requireCandleConfirmation ? bearishRejection : true
+
+rsiLongConfirmed  = useRsiFilter ? rsiOversoldReversal : true
+rsiShortConfirmed = useRsiFilter ? rsiOverboughtReversal : true
+
+// 6. Institutional Anti-Fakeout & Trap Detection Engine
+isBullTrapWick = candleRange > 0 and (upperWick / candleRange > maxTrapWickPct or upperWick > candleBody * 1.2 or close < (low + candleRange * 0.45))
+isBearTrapWick = candleRange > 0 and (lowerWick / candleRange > maxTrapWickPct or lowerWick > candleBody * 1.2 or close > (high - candleRange * 0.45))
+
+isBullTrap = filterFakeouts and isBullTrapWick
+isBearTrap = filterFakeouts and isBearTrapWick
+
+// Dynamic Slow EMA slope to prevent buying into a cascading down-trend
+emaSlowFalling = emaSlow < emaSlow[1] - (currentAtr * 0.01)
+emaSlowRising  = emaSlow > emaSlow[1] + (currentAtr * 0.01)
+
+longEmaFilterPassed  = filterFakeouts ? (close > emaSlow and close > emaFast and not emaSlowFalling) : (close > emaFast)
+shortEmaFilterPassed = filterFakeouts ? (close < emaSlow and close < emaFast and not emaSlowRising) : (close < emaFast)
+
+// Zone Proximity Guards: Require adequate headroom to run (min 1.2x ATR) before opposing ceiling/floor
+minHeadroom = currentAtr * 1.2
+distToSupply = not na(supplyZoneBot) ? (supplyZoneBot - close) : 1e10
+distToDemand = not na(demandZoneTop) ? (close - demandZoneTop) : 1e10
+
+tooCloseToSupply = not na(supplyZoneBot) and (supplyZoneBot - close <= minHeadroom and close <= supplyZoneTop)
+tooCloseToDemand = not na(demandZoneTop) and (close - demandZoneTop <= minHeadroom and close >= demandZoneBot)
+
+// Broken zone checks: If price broke below benchLow (PDL) or active demand floor, price is in a breakdown regime!
+isUnderBrokenDemand = (not na(demandZoneBot) and close < demandZoneBot) or (not na(benchLow) and close < benchLow)
+isAboveBrokenSupply = (not na(supplyZoneTop) and close > supplyZoneTop) or (not na(benchHigh) and close > benchHigh)
+
+// Institutional Bounce Clearance: Never catch a falling knife in a cascading Bear ribbon!
+// Long bounces at Demand require price to close above Fast EMA (9) with bullish candle close and NOT in active Bear ribbon.
+demBounceAllowed = inBuyZone and (close > emaFast) and (close > open) and not isBullTrap and not isEmaBear
+supBounceAllowed = inSellZone and (close < emaFast) and (close < open) and not isBearTrap and not isEmaBull
+
+// Strict Macro Trend Lock: Longs require Macro Bull OR genuine CHoCH bounce clearance.
+macroBullAllowed = (macroTrendBull or demBounceAllowed) and (isEmaBull or demBounceAllowed or close > emaSlow)
+macroBearAllowed = (macroTrendBear or supBounceAllowed) and (isEmaBear or supBounceAllowed or close < emaSlow)
+
+// Reversal Anti-Fakeout Guards: Block buying if under broken PDL/Demand in Bear regime, or if too close to supply
+demandBuyFakeoutBlocked  = filterFakeouts and ((isUnderBrokenDemand and isEmaBear) or isBullTrap or (close < open) or isEmaBear or tooCloseToSupply)
+supplySellFakeoutBlocked = filterFakeouts and ((isAboveBrokenSupply and isEmaBull) or isBearTrap or (close > open) or isEmaBull or tooCloseToDemand)
+
+// 1. Real Trend Inception (Triggered strictly when the real trend starts, NO FAKEOUTS!)
+trendStartBull = isEmaBull and not isEmaBull[1] and longEmaFilterPassed and (close > open) and not isBullTrap and not tooCloseToSupply
+trendStartBear = isEmaBear and not isEmaBear[1] and shortEmaFilterPassed and (close < open) and not isBearTrap and not tooCloseToDemand
+
+// 2. Structural Expansion Breakouts (Trend acceleration through zones)
+bullBreakout = enableBreakouts and not na(supplyZoneTop) and (close > supplyZoneTop) and ta.crossover(close, supplyZoneTop) and (close > open) and isEmaBull and longEmaFilterPassed and not isBullTrap and (rsiVal > 48 and rsiVal < 80)
+bearBreakdown = enableBreakouts and not na(demandZoneBot) and (close < demandZoneBot) and ta.crossunder(close, demandZoneBot) and (close < open) and isEmaBear and shortEmaFilterPassed and not isBearTrap and (rsiVal < 52 and rsiVal > 20)
+
+// 3. Strict Trend-Protected Reversals
+buyReversalSignal  = enableSignals and inBuyZone and bullishConfirmation and rsiLongConfirmed and (not filterReversalsWithEma or not isEmaBear) and (not demandBuyFakeoutBlocked) and (not filterMiddleTrades or not inMiddleEqZone)
+sellReversalSignal = enableSignals and inSellZone and bearishConfirmation and rsiShortConfirmed and (not filterReversalsWithEma or not isEmaBull) and (not supplySellFakeoutBlocked) and (not filterMiddleTrades or not inMiddleEqZone)
+
+// 4. Institutional Retracement / Pullback Signals inside Demand & Supply Zones
+isDemRetraceBounce   = inBuyZone and (close > open) and candleRange > 0 and (lowerWick / candleRange >= 0.30 or (close - low) >= candleRange * 0.35) and not isBullTrap and not isUnderBrokenDemand and not tooCloseToSupply and discountLongAllowed and not isEmaBear and (macroTrendBull or close > benchLow) and not demandBuyFakeoutBlocked
+isSupRetraceBounce   = inSellZone and (close < open) and candleRange > 0 and (upperWick / candleRange >= 0.30 or (high - close) >= candleRange * 0.35) and not isBearTrap and not isAboveBrokenSupply and not tooCloseToDemand and premiumShortAllowed and not isEmaBull and (macroTrendBear or close < benchHigh) and not supplySellFakeoutBlocked
+
+demandPullbackSignal = enableSignals and isDemRetraceBounce
+supplyPullbackSignal = enableSignals and isSupRetraceBounce
+
+// 5. Institutional Trend Continuation Pullback into the Magic EMA Cloud & Value Zone
+emaPullbackWickBull  = candleRange > 0 and (lowerWick / candleRange >= 0.30 or (close - low) >= candleRange * 0.35)
+emaPullbackWickBear  = candleRange > 0 and (upperWick / candleRange >= 0.30 or (high - close) >= candleRange * 0.35)
+
+emaBullPullbackLong  = enableSignals and macroTrendBull and discountLongAllowed and (isEmaBull or close > emaSlow) and (low <= emaSlow or low <= emaFast) and (close > emaFast) and (close > open) and emaPullbackWickBull and not isBullTrap and not tooCloseToSupply and (not filterMiddleTrades or not inMiddleEqZone)
+emaBearPullbackShort = enableSignals and macroTrendBear and premiumShortAllowed  and (isEmaBear or close < emaSlow) and (high >= emaSlow or high >= emaFast) and (close < emaFast) and (close < open) and emaPullbackWickBear and not isBearTrap and not tooCloseToDemand and (not filterMiddleTrades or not inMiddleEqZone)
+
+// 6. Institutional AVWAP & POC Retracement & Bounce Signals (Plan A: AVWAP Test / Plan B: POC Shelf)
+bool hasAvwapBull = showZoneAvwap and not na(dynamicAvwapVal) and avwapSlope >= 0
+bool hasAvwapBear = showZoneAvwap and not na(dynamicAvwapVal) and avwapSlope <= 0
+
+// Test Zone: Price dips to test the rising AVWAP or Volume POC shelf (within 0.35 ATR)
+bool avwapTestBull = hasAvwapBull and ((low <= dynamicAvwapVal + (currentAtr * 0.35) and low >= dynamicAvwapVal - (currentAtr * 0.75)) or (not na(dynamicPocVal) and low <= dynamicPocVal + (currentAtr * 0.25) and low >= dynamicPocVal - (currentAtr * 0.50)))
+bool avwapTestBear = hasAvwapBear and ((high >= dynamicAvwapVal - (currentAtr * 0.35) and high <= dynamicAvwapVal + (currentAtr * 0.75)) or (not na(dynamicPocVal) and high >= dynamicPocVal - (currentAtr * 0.25) and high <= dynamicPocVal + (currentAtr * 0.50)))
+
+// Rejection & Absorption Confirmation: Candle bounces off AVWAP/POC with rejection wick and closes in direction of trend
+bool avwapBounceBull = avwapTestBull and (close > open) and (close >= dynamicAvwapVal or (not na(dynamicPocVal) and close >= dynamicPocVal)) and candleRange > 0 and (lowerWick / candleRange >= 0.20 or (close - low) >= candleRange * 0.25 or close > high[1]) and not isBullTrap and not tooCloseToSupply
+bool avwapBounceBear = avwapTestBear and (close < open) and (close <= dynamicAvwapVal or (not na(dynamicPocVal) and close <= dynamicPocVal)) and candleRange > 0 and (upperWick / candleRange >= 0.20 or (high - close) >= candleRange * 0.25 or close < low[1]) and not isBearTrap and not tooCloseToDemand
+
+avwapPullbackLong  = enableSignals and macroTrendBull and discountLongAllowed and (isEmaBull or close > emaSlow) and avwapBounceBull
+avwapPullbackShort = enableSignals and macroTrendBear and premiumShortAllowed  and (isEmaBear or close < emaSlow) and avwapBounceBear
+
+//=============================================================================
+// 6. UNIVERSAL MARKET-AGNOSTIC EXECUTION GATES
+//=============================================================================
+
+// Gate 1: Higher-Timeframe Market Structure Bias (Any Market: NSE/BSE, MCX, Crypto, US)
+htfBullAllowed = not useHtfStructure or structureBias >= 0 or (demBounceAllowed and not isEmaBear)
+htfBearAllowed = not useHtfStructure or structureBias <= 0 or (supBounceAllowed and not isEmaBull)
+
+// Gate 2: Adaptive Session & Liquidity Filter (No hardcoded times; dynamic syminfo.timezone)
+bool autoExchangeSession = not na(time(timeframe.period, session.regular)) or not na(time(timeframe.period, session.extended)) or not na(time(timeframe.period, "0900-2330", syminfo.timezone)) or not na(time(timeframe.period, "0915-1530", syminfo.timezone)) or not na(time(timeframe.period, "0930-1530", syminfo.timezone))
+bool customExchangeSession = not na(time(timeframe.period, customSessionStr, syminfo.timezone))
+inExchangeSession = sessionMode == "24/7 (Crypto)" ? true : sessionMode == "Auto (Exchange Hours)" ? autoExchangeSession : customExchangeSession
+
+primaryWindow   = not na(time(timeframe.period, primaryWindowStr, syminfo.timezone))
+secondaryWindow = not na(time(timeframe.period, secondaryWindowStr, syminfo.timezone))
+
+allowNewEntry = not useSessionFilter or (sessionMode == "24/7 (Crypto)") or (not timeframe.isintraday) or (useLiquidityWindows ? (inExchangeSession and (primaryWindow or secondaryWindow)) : inExchangeSession)
+
+// Gate 3: Second-Test / Mitigation Counter (Zone Tap Tracking)
+var int   demandTestCount   = 0
+var int   supplyTestCount   = 0
+var float lastTrackedDemBot = na
+var float lastTrackedSupTop = na
+
+if not na(demandZoneBot) and demandZoneBot != lastTrackedDemBot
+    demandTestCount   := 0
+    lastTrackedDemBot := demandZoneBot
+if not na(supplyZoneTop) and supplyZoneTop != lastTrackedSupTop
+    supplyTestCount   := 0
+    lastTrackedSupTop := supplyZoneTop
+
+bool isNewDemandTouch = inBuyZone and (low <= demandZoneTop) and not (inBuyZone[1] and low[1] <= demandZoneTop[1])
+bool isNewSupplyTouch = inSellZone and (high >= supplyZoneBot) and not (inSellZone[1] and high[1] >= supplyZoneBot[1])
+
+if isNewDemandTouch
+    demandTestCount += 1
+if isNewSupplyTouch
+    supplyTestCount += 1
+
+fullSizeLong  = demandTestCount >= 2
+fullSizeShort = supplyTestCount >= 2
+halfSizeLong  = demandTestCount == 1
+halfSizeShort = supplyTestCount == 1
+
+// Gate 4: Relative Volume + Simple CVD Proxy Gate (Universal & Zero-Volume Safe)
+hasVolumeData = not na(volume) and volume > 0
+relVolOk      = not hasVolumeData or (not na(volSma20) and volSma20 > 0 and volume > volSma20 * volSurgeRatio)
+cvdProxy      = hasVolumeData ? ta.cum(close > open ? volume : -volume) : 0.0
+cvdRising     = not hasVolumeData or (cvdProxy > cvdProxy[1])
+cvdFalling    = not hasVolumeData or (cvdProxy < cvdProxy[1])
+
+longVolConfirm  = not useVolCvdFilter or (relVolOk and (cvdRising or close > open))
+shortVolConfirm = not useVolCvdFilter or (relVolOk and (cvdFalling or close < open))
+
+// Gate 5: Manual News Blackout Gate
+// (newsBlackout input directly blocks new trade initiation)
+
+// Gate 6: Volatility Regime Gate (ATR Percentile Distribution)
+atrPctile   = ta.percentrank(currentAtr, 100)
+volRegimeOk = not useVolRegimeGate or (atrPctile >= minAtrPctile and atrPctile <= maxAtrPctile)
+
+// Master Long & Short Triggers (Strictly gated by institutional confluence & multi-market gates)
+newLongTrigger  = (enableSignals and macroBullAllowed and htfBullAllowed and 
+                   allowNewEntry and not newsBlackout and volRegimeOk and 
+                   not isSqueezeChop and longVolConfirm and not tooCloseToSupply and 
+                   (trendStartBull or bullBreakout or buyReversalSignal or 
+                    retestBuySignal or demandPullbackSignal or emaBullPullbackLong or avwapPullbackLong))
+
+newShortTrigger = (enableSignals and macroBearAllowed and htfBearAllowed and 
+                   allowNewEntry and not newsBlackout and volRegimeOk and 
+                   not isSqueezeChop and shortVolConfirm and not tooCloseToDemand and 
+                   (trendStartBear or bearBreakdown or sellReversalSignal or 
+                    retestSellSignal or supplyPullbackSignal or emaBearPullbackShort or avwapPullbackShort))
+
+
+var int lastSignalBar = 0
+var string tradeState = "FLAT"
+var string currentTradeType = ""
+var float entryPrice = na
+var float stopLossPrice = na
+var float takeProfit1 = na
+
+// Signal Execution (State-locked: ONE clean signal per trend move, with pullback retests supported)
+canRetraceBuy  = demandPullbackSignal and macroBullAllowed and htfBullAllowed and not isEmaBear and allowNewEntry and not newsBlackout and volRegimeOk and not isSqueezeChop and (bar_index - lastSignalBar >= minBarsBetweenSignals) and (tradeState != "LONG" or (entryPrice > 0 and low < entryPrice - (currentAtr * 0.2)))
+canRetraceSell = supplyPullbackSignal and macroBearAllowed and htfBearAllowed and not isEmaBull and allowNewEntry and not newsBlackout and volRegimeOk and not isSqueezeChop and (bar_index - lastSignalBar >= minBarsBetweenSignals) and (tradeState != "SHORT" or (entryPrice > 0 and high > entryPrice + (currentAtr * 0.2)))
+
+buyCondition  = (newLongTrigger and (tradeState != "LONG") and (bar_index - lastSignalBar >= minBarsBetweenSignals)) or canRetraceBuy
+sellCondition = (newShortTrigger and (tradeState != "SHORT") and (bar_index - lastSignalBar >= minBarsBetweenSignals)) or canRetraceSell
+
+if buyCondition
+    tradeState := "LONG"
+    lastSignalBar := bar_index
+    entryPrice := close
+    currentTradeType := avwapPullbackLong ? "AVWAP PULLBACK BUY" : demandPullbackSignal ? "PULLBACK BUY" : emaBullPullbackLong ? "CONTINUATION BUY" : trendStartBull ? "TREND START BUY" : bullBreakout ? "BREAKOUT BUY" : retestBuySignal ? "RETEST BUY" : "DEMAND BUY"
+    // For retest entries: use the locked SL from the flipped zone; otherwise use AVWAP SL, retrace box SL, or demand floor
+    float stopLossBase = na
+    if retestBuySignal and not na(retestBuySL)
+        stopLossBase := retestBuySL
+    else if avwapPullbackLong and not na(dynamicAvwapVal)
+        stopLossBase := dynamicAvwapVal - (currentAtr * atrBufferMult)
+    else if demandPullbackSignal and showRetraceArea and not na(demSL)
+        stopLossBase := demSL
+    else if not na(demandZoneBot)
+        stopLossBase := demandZoneBot - (currentAtr * atrBufferMult)
+    else
+        stopLossBase := emaSlow - (currentAtr * 0.5)
+    stopLossPrice := stopLossBase
+    riskDist = math.max(entryPrice - stopLossPrice, currentAtr * 0.5)
+    takeProfit1 := entryPrice + (riskDist * riskRewardRatio)
+
+
+if sellCondition
+    tradeState := "SHORT"
+    lastSignalBar := bar_index
+    entryPrice := close
+    currentTradeType := avwapPullbackShort ? "AVWAP PULLBACK SELL" : supplyPullbackSignal ? "PULLBACK SELL" : emaBearPullbackShort ? "CONTINUATION SELL" : trendStartBear ? "TREND START SELL" : bearBreakdown ? "BREAKDOWN SELL" : retestSellSignal ? "RETEST SELL" : "SUPPLY SELL"
+    // For retest entries: use the locked SL from the flipped zone; otherwise use AVWAP SL, retrace box SL, or supply ceiling
+    float stopLossBase = na
+    if retestSellSignal and not na(retestSellSL)
+        stopLossBase := retestSellSL
+    else if avwapPullbackShort and not na(dynamicAvwapVal)
+        stopLossBase := dynamicAvwapVal + (currentAtr * atrBufferMult)
+    else if supplyPullbackSignal and showRetraceArea and not na(supSL)
+        stopLossBase := supSL
+    else if not na(supplyZoneTop)
+        stopLossBase := supplyZoneTop + (currentAtr * atrBufferMult)
+    else
+        stopLossBase := emaSlow + (currentAtr * 0.5)
+    stopLossPrice := stopLossBase
+    riskDist = math.max(stopLossPrice - entryPrice, currentAtr * 0.5)
+    takeProfit1 := entryPrice - (riskDist * riskRewardRatio)
+
+
+// Signal Visual Styling (Arrows / Triangles / Diamonds / Badges with Rich Tooltips - Zero Box Overlap!)
+useArrows    = signalIconStyle == "Sleek Arrows with Tooltip (Zero Overlap)"
+useTriangles = signalIconStyle == "Crisp Triangles with Tooltip"
+useDiamonds  = signalIconStyle == "Diamonds with Tooltip"
+useCards     = signalIconStyle == "Modern Text Cards"
+
+priceStr = str.tostring(close, "#.##")
+slStr    = str.tostring(stopLossPrice, "#.##")
+tpStr    = str.tostring(takeProfit1, "#.##")
+
+// Draw ONE clean icon when the real trend starts or breaks out!
+f_drawSignalIcons() =>
+    label sigLabel = na
+    if buyCondition
+        string sizeTag = useZoneTestSizing ? (halfSizeLong ? " [1/2 Size]" : " [Full Size]") : ""
+        cardTitle  = (avwapPullbackLong ? "⚓ AVWAP PULLBACK BUY" : demandPullbackSignal ? "🏹 DEMAND PULLBACK BUY" : emaBullPullbackLong ? "🚀 TREND CONTINUATION BUY" : trendStartBull ? "🚀 TREND START BUY" : bullBreakout ? "⚡ BREAKOUT BUY" : retestBuySignal ? "🏹 RETEST BUY" : "🟢 DEMAND BUY") + sizeTag
+        float longRiskPts = math.abs(close - stopLossPrice)
+        float longRewardPts = math.abs(takeProfit1 - close)
+        string longRRStr = "1:" + str.tostring(riskRewardRatio, "#.#") + " (" + str.tostring(longRiskPts, "#.#") + " pts risk / " + str.tostring(longRewardPts, "#.#") + " pts target)"
+        string buyReason = avwapPullbackLong ? "Institutional AVWAP / POC Pullback Test & Absorption Bounce" : demandPullbackSignal ? "Institutional Rejection Wick at Demand Floor" : emaBullPullbackLong ? "Dip Pullback Test into Rising Bull Cloud" : trendStartBull ? "Magic EMA Cloud Inception & Momentum Flip" : bullBreakout ? "Institutional Breakout Above Supply Zone" : retestBuySignal ? "Pullback Test into Broken Supply (Flipped Role)" : "Confluence Bounce at Macro Demand Base"
+        string mitigationNote = useZoneTestSizing ? (halfSizeLong ? "\nMitigation:   1st Test (Conservative Half Size)" : fullSizeLong ? "\nMitigation:   2nd+ Test (Confirmed Full Size)" : "") : ""
+        buyTooltip = "🏛️ INSTITUTIONAL LONG ENTRY\n──────────────────────────────\nSetup:        " + cardTitle + "\nRationale:    " + buyReason + mitigationNote + "\nEntry Price:  " + priceStr + "\nStop-Loss:    " + slStr + " (Protected Structural Low)\nTake-Profit:  " + tpStr + " (Opposing Liquidity Zone)\nRisk:Reward:  " + longRRStr + "\nRSI Momentum: " + str.tostring(rsiVal, "#.#") + "\nConfluence:   " + (supIsConfluence ? "Confirmed MTF Convergence" : "HTF Structural Extremes")
+        if useArrows
+            sigLabel := label.new(bar_index, low, "", yloc=yloc.belowbar, style=label.style_arrowup, color=color.new(#00E676, 0), size=size.normal, tooltip=buyTooltip)
+        else if useTriangles
+            sigLabel := label.new(bar_index, low, "", yloc=yloc.belowbar, style=label.style_triangleup, color=color.new(#00E676, 0), size=size.small, tooltip=buyTooltip)
+        else if useDiamonds
+            sigLabel := label.new(bar_index, low, "◆", yloc=yloc.belowbar, style=label.style_none, textcolor=color.new(#00E676, 0), size=size.normal, tooltip=buyTooltip)
+        else
+            // Icon-only badge with zero box background (Hover mouse to see full details)
+            sigLabel := label.new(bar_index, low, "🟢", yloc=yloc.belowbar, style=label.style_none, textcolor=color.new(#00E676, 0), size=size.normal, tooltip=buyTooltip)
+        label.delete(na)
+
+    if sellCondition
+        string sizeTag = useZoneTestSizing ? (halfSizeShort ? " [1/2 Size]" : " [Full Size]") : ""
+        cardTitle   = (avwapPullbackShort ? "⚓ AVWAP PULLBACK SELL" : supplyPullbackSignal ? "🏹 SUPPLY PULLBACK SELL" : emaBearPullbackShort ? "📉 TREND CONTINUATION SELL" : trendStartBear ? "📉 TREND START SELL" : bearBreakdown ? "⚡ BREAKDOWN SELL" : retestSellSignal ? "🏹 RETEST SELL" : "🔴 SUPPLY SELL") + sizeTag
+        float shortRiskPts = math.abs(stopLossPrice - close)
+        float shortRewardPts = math.abs(close - takeProfit1)
+        string shortRRStr = "1:" + str.tostring(riskRewardRatio, "#.#") + " (" + str.tostring(shortRiskPts, "#.#") + " pts risk / " + str.tostring(shortRewardPts, "#.#") + " pts target)"
+        string sellReason = avwapPullbackShort ? "Institutional AVWAP / POC Rally Rejection & Supply Absorption" : supplyPullbackSignal ? "Institutional Rejection Wick at Supply Ceiling" : emaBearPullbackShort ? "Rally Pullback Test into Falling Bear Cloud" : trendStartBear ? "Magic EMA Cloud Breakdown & Momentum Flip" : bearBreakdown ? "Institutional Breakdown Below Demand Floor" : retestSellSignal ? "Pullback Test into Broken Demand (Flipped Role)" : "Confluence Rejection at Macro Supply Peak"
+        string mitigationNote = useZoneTestSizing ? (halfSizeShort ? "\nMitigation:   1st Test (Conservative Half Size)" : fullSizeShort ? "\nMitigation:   2nd+ Test (Confirmed Full Size)" : "") : ""
+        sellTooltip = "🏛️ INSTITUTIONAL SHORT ENTRY\n──────────────────────────────\nSetup:        " + cardTitle + "\nRationale:    " + sellReason + mitigationNote + "\nEntry Price:  " + priceStr + "\nStop-Loss:    " + slStr + " (Protected Structural High)\nTake-Profit:  " + tpStr + " (Opposing Liquidity Floor)\nRisk:Reward:  " + shortRRStr + "\nRSI Momentum: " + str.tostring(rsiVal, "#.#") + "\nConfluence:   " + (resIsConfluence ? "Confirmed MTF Convergence" : "HTF Structural Extremes")
+        if useArrows
+            sigLabel := label.new(bar_index, high, "", yloc=yloc.abovebar, style=label.style_arrowdown, color=color.new(#FF1744, 0), size=size.normal, tooltip=sellTooltip)
+        else if useTriangles
+            sigLabel := label.new(bar_index, high, "", yloc=yloc.abovebar, style=label.style_triangledown, color=color.new(#FF1744, 0), size=size.small, tooltip=sellTooltip)
+        else if useDiamonds
+            sigLabel := label.new(bar_index, high, "◆", yloc=yloc.abovebar, style=label.style_none, textcolor=color.new(#FF1744, 0), size=size.normal, tooltip=sellTooltip)
+        else
+            // Icon-only badge with zero box background (Hover mouse to see full details)
+            sigLabel := label.new(bar_index, high, "🔴", yloc=yloc.abovebar, style=label.style_none, textcolor=color.new(#FF1744, 0), size=size.normal, tooltip=sellTooltip)
+        label.delete(na)
+
+
+
+f_drawSignalIcons()
+
+// Clean Active Trade Target & Stop-Loss Lines (Active trade ONLY — Zero ghost lines on previous days!)
+// Clean Active Trade Target & Stop-Loss Lines (Active trade ONLY — Zero ghost lines on previous days!)
+var line activeSLLine   = na
+var line activeTPLine   = na
+var label activeSLLabel = na
+var label activeTPLabel = na
+
+if showTargets and tradeState != "FLAT" and not na(entryPrice) and not na(stopLossPrice) and not na(takeProfit1)
+    line.delete(activeSLLine)
+    line.delete(activeTPLine)
+    label.delete(activeSLLabel)
+    label.delete(activeTPLabel)
+    color slCol = color.new(#FF1744, 20)
+    color tpCol = tradeState == "LONG" ? color.new(#00E676, 20) : color.new(#00E5FF, 20)
+
+    float riskPts   = math.abs(entryPrice - stopLossPrice)
+    float rewardPts = math.abs(takeProfit1 - entryPrice)
+    bool isBeActive = (tradeState == "LONG" and stopLossPrice >= entryPrice) or (tradeState == "SHORT" and stopLossPrice <= entryPrice)
+
+    color slBg = #381014
+    color slFg = #FF6B6B
+    color tpBg = tradeState == "LONG" ? #064E3B : #083344
+    color tpFg = tradeState == "LONG" ? #4ADE80 : #22D3EE
+
+    string slLabelText = isBeActive ? ("🛡️ SL (BREAK-EVEN): " + str.tostring(stopLossPrice, priceFmt)) : ("🛑 ACTIVE SL: " + str.tostring(stopLossPrice, priceFmt) + " (" + str.tostring(riskPts, priceFmt) + " pts risk)")
+    string tpLabelText = "🎯 ACTIVE TP: " + str.tostring(takeProfit1, priceFmt) + " (" + str.tostring(riskRewardRatio, "#.#") + " R:R • " + str.tostring(rewardPts, priceFmt) + " pts)"
+
+    activeSLLine := line.new(x1=nz(lastSignalBar, bar_index), y1=stopLossPrice, x2=bar_index + 15, y2=stopLossPrice, color=slCol, width=2, style=line.style_dashed)
+    activeTPLine := line.new(x1=nz(lastSignalBar, bar_index), y1=takeProfit1,   x2=bar_index + 15, y2=takeProfit1,   color=tpCol, width=2, style=line.style_solid)
+
+    activeSLLabel := label.new(bar_index + 15, stopLossPrice, slLabelText, color=slBg, textcolor=slFg, style=label.style_label_left, size=size.small)
+    activeTPLabel := label.new(bar_index + 15, takeProfit1,   tpLabelText, color=tpBg, textcolor=tpFg, style=label.style_label_left, size=size.small)
+else
+    line.delete(activeSLLine)
+    line.delete(activeTPLine)
+    label.delete(activeSLLabel)
+    label.delete(activeTPLabel)
+    activeSLLine  := na
+    activeTPLine  := na
+    activeSLLabel := na
+    activeTPLabel := na
+
+// Live Backtest Performance Variables
+var int totalTrades = 0
+var int winTrades   = 0
+var int lossTrades  = 0
+var float grossWins = 0.0
+var float grossLosses = 0.0
+
+// Emergency News Shock Reversal Exits (Sudden structural failure on heavy volume)
+bool newsShockExitLong  = (not na(demandZoneBot) and close < demandZoneBot and candleRange > currentAtr * 1.5 and close < open) or (isUnderBrokenDemand and close < benchLow - (currentAtr * 0.5))
+bool newsShockExitShort = (not na(supplyZoneTop) and close > supplyZoneTop and candleRange > currentAtr * 1.5 and close > open) or (isAboveBrokenSupply and close > benchHigh + (currentAtr * 0.5))
+
+var bool triggeredNewsExitLong  = false
+var bool triggeredNewsExitShort = false
+triggeredNewsExitLong  := false
+triggeredNewsExitShort := false
+
+// Active Trade Resolution & Tracking with Institutional Break-Even Trailing
+if tradeState == "LONG"
+    riskAmt = math.max(entryPrice - stopLossPrice, currentAtr * 0.5)
+    // 1. Move SL to Break-Even once 1:1 R:R is achieved
+    if useTrailingBE and high >= (entryPrice + riskAmt) and stopLossPrice < entryPrice
+        stopLossPrice := entryPrice
+
+    // 2. Take Profit Hit
+    if high >= takeProfit1
+        winTrades   += 1
+        totalTrades += 1
+        grossWins   += math.abs(takeProfit1 - entryPrice)
+        tradeState  := "FLAT"
+    // 3. Stop Loss Hit
+    else if low <= stopLossPrice
+        if stopLossPrice >= entryPrice
+            winTrades   += 1
+            totalTrades += 1
+            grossWins   += math.max(0.0, stopLossPrice - entryPrice)
+        else
+            lossTrades  += 1
+            totalTrades += 1
+            grossLosses += math.abs(entryPrice - stopLossPrice)
+        tradeState  := "FLAT"
+    else if isNewDay and isOptionActive
+        // Options: close intraday positions at end of session
+        if close >= entryPrice
+            winTrades += 1
+            grossWins += math.abs(close - entryPrice)
+        else
+            lossTrades += 1
+            grossLosses += math.abs(entryPrice - close)
+        totalTrades += 1
+        tradeState := "FLAT"
+    else if newsShockExitLong
+        if close >= entryPrice
+            winTrades += 1
+            grossWins += math.abs(close - entryPrice)
+        else
+            lossTrades += 1
+            grossLosses += math.abs(entryPrice - close)
+        totalTrades += 1
+        tradeState := "FLAT"
+        triggeredNewsExitLong := true
+
+if tradeState == "SHORT"
+    riskAmt = math.max(stopLossPrice - entryPrice, currentAtr * 0.5)
+    // 1. Move SL to Break-Even once 1:1 R:R is achieved
+    if useTrailingBE and low <= (entryPrice - riskAmt) and stopLossPrice > entryPrice
+        stopLossPrice := entryPrice
+
+    // 2. Take Profit Hit
+    if low <= takeProfit1
+        winTrades   += 1
+        totalTrades += 1
+        grossWins   += math.abs(entryPrice - takeProfit1)
+        tradeState  := "FLAT"
+    // 3. Stop Loss Hit
+    else if high >= stopLossPrice
+        if stopLossPrice <= entryPrice
+            winTrades   += 1
+            totalTrades += 1
+            grossWins   += math.max(0.0, entryPrice - stopLossPrice)
+        else
+            lossTrades  += 1
+            totalTrades += 1
+            grossLosses += math.abs(stopLossPrice - entryPrice)
+        tradeState  := "FLAT"
+    else if isNewDay and isOptionActive
+        // Options: close intraday positions at end of session
+        if close <= entryPrice
+            winTrades += 1
+            grossWins += math.abs(entryPrice - close)
+        else
+            lossTrades += 1
+            grossLosses += math.abs(close - entryPrice)
+        totalTrades += 1
+        tradeState := "FLAT"
+    else if newsShockExitShort
+        if close <= entryPrice
+            winTrades += 1
+            grossWins += math.abs(entryPrice - close)
+        else
+            lossTrades += 1
+            grossLosses += math.abs(close - entryPrice)
+        totalTrades += 1
+        tradeState := "FLAT"
+        triggeredNewsExitShort := true
+
+// News Reversal Visual On-Chart Alerts (Clean Warning Icon with Tooltip — Zero Box Overlap!)
+var label newsExitLabel = na
+bool showNewsExitAlertLong  = triggeredNewsExitLong
+bool showNewsExitAlertShort = triggeredNewsExitShort
+
+if showNewsExitAlertLong
+    label.delete(newsExitLabel)
+    string newsLongTip = "⚠️ REVERSAL / NEWS SHOCK\n──────────────────────────────\nAction:       CLOSE LONG NOW\nExit LTP:     " + str.tostring(close, priceFmt) + "\nReason:       Sudden structural breakdown below Demand/PDL on heavy volatility.\nRecommendation: Exit trade immediately to protect capital."
+    newsExitLabel := label.new(bar_index, high, "⚠️", yloc=yloc.abovebar, style=label.style_none, textcolor=color.new(#FF1744, 0), size=size.normal, tooltip=newsLongTip)
+
+if showNewsExitAlertShort
+    label.delete(newsExitLabel)
+    string newsShortTip = "⚠️ REVERSAL / NEWS SHOCK\n──────────────────────────────\nAction:       CLOSE SHORT NOW\nExit LTP:     " + str.tostring(close, priceFmt) + "\nReason:       Sudden structural breakout above Supply/PDH on heavy volatility.\nRecommendation: Exit trade immediately to protect capital."
+    newsExitLabel := label.new(bar_index, low, "⚠️", yloc=yloc.belowbar, style=label.style_none, textcolor=color.new(#00E676, 0), size=size.normal, tooltip=newsShortTip)
+
+// Performance Metrics
+winRate = totalTrades > 0 ? (winTrades * 100.0 / totalTrades) : 0.0
+profitFactor = grossLosses > 0 ? (grossWins / grossLosses) : (grossWins > 0 ? 9.99 : 0.0)
+
+//=============================================================================
+// 8. TRADINGVIEW ALERTS — OPTIMIZED (10 Essential Conditions)
+//=============================================================================
+// Expert Trader Design Philosophy:
+//   — 1 BUY alert + 1 SELL alert cover ALL setup types (type embedded in message)
+//   — 2 Exit alerts: TP Hit (Long/Short separate for clarity)
+//   — 2 Exit alerts: SL Hit (Long/Short separate)
+//   — 1 Break-Even alert (Long + Short combined — same action: relax SL)
+//   — 2 Zone alerts: Demand / Supply entry (pre-signal early warning)
+//   — 2 Breakout/Breakdown alerts (zone flip confirmation)
+//   — 2 Trend alerts: Bull flip / Bear flip (regime change)
+//   — 2 News Shock exit alerts
+// Each group is gated by the toggle inputs in Settings > "8. Alert Notifications"
+// TradingView supports {ticker} and {interval} as auto-fill placeholders.
+//=============================================================================
+
+// ─── Shared message building blocks ─────────────────────────────────────────
+// Auto-detect setup type label for a single clean BUY / SELL alert message
+string _buySetup  = avwapPullbackLong ? "⚓ AVWAP Pullback" : trendStartBull ? "🚀 Trend Start" : bullBreakout ? "⚡ Supply Breakout" : retestBuySignal ? "🏹 Retest (Flipped Demand)" : demandPullbackSignal ? "🎯 Demand Pullback" : emaBullPullbackLong ? "🔄 EMA Continuation" : "🟢 Demand Bounce"
+string _sellSetup = avwapPullbackShort ? "⚓ AVWAP Pullback" : trendStartBear ? "📉 Trend Start" : bearBreakdown ? "⚡ Demand Breakdown" : retestSellSignal ? "🏹 Retest (Flipped Supply)" : supplyPullbackSignal ? "🎯 Supply Pullback" : emaBearPullbackShort ? "🔄 EMA Continuation" : "🔴 Supply Rejection"
+string _sizeNote  = useZoneTestSizing ? (halfSizeLong or halfSizeShort ? " | 1st Test — ½ Size" : " | 2nd+ Test — Full Size") : ""
+
+// ─── Exit/Resolve detection ──────────────────────────────────────────────────
+bool _longTPHit   = tradeState[1] == "LONG"  and high  >= nz(takeProfit1[1]) and not na(takeProfit1[1])
+bool _shortTPHit  = tradeState[1] == "SHORT" and low   <= nz(takeProfit1[1]) and not na(takeProfit1[1])
+bool _longSLHit   = tradeState[1] == "LONG"  and tradeState == "FLAT" and not _longTPHit  and not (isNewDay and isOptionActive)
+bool _shortSLHit  = tradeState[1] == "SHORT" and tradeState == "FLAT" and not _shortTPHit and not (isNewDay and isOptionActive)
+bool _longBEMove  = tradeState == "LONG"  and stopLossPrice >= entryPrice and stopLossPrice[1] < entryPrice
+bool _shortBEMove = tradeState == "SHORT" and stopLossPrice <= entryPrice and stopLossPrice[1] > entryPrice
+bool _beActivated = _longBEMove or _shortBEMove
+
+// ─── Zone / Breakout detection ───────────────────────────────────────────────
+bool _enteredDemand   = inBuyZone  and not inBuyZone[1]
+bool _enteredSupply   = inSellZone and not inSellZone[1]
+bool _supBreakout     = not na(supplyZoneTop) and close[1] <= supplyZoneTop and close > supplyZoneTop
+bool _demBreakdown    = not na(demandZoneBot) and close[1] >= demandZoneBot and close < demandZoneBot
+
+// ─── Trend flip detection ────────────────────────────────────────────────────
+bool _bullFlip        = isEmaBull and not isEmaBull[1]
+bool _bearFlip        = isEmaBear and not isEmaBear[1]
+
+//──────────────────────────────────────────────────────────────────────────────
+// ALERT CONDITIONS (14 Essential TradingView Menu Conditions)
+// Each alertcondition uses a compile-time const string message with standard TV placeholders
+//──────────────────────────────────────────────────────────────────────────────
+// ALERT 1 — BUY ENTRY  (all setup types, toggle: alertOnEntry)
+alertcondition(alertOnEntry and buyCondition, title = "🟢 ENTRY: Institutional BUY Signal", message = "🟢 BUY SIGNAL | {{ticker}} {{interval}}\nPrice: {{close}}\nSetup: Institutional Demand / Trend Continuation\nAction: Execute BUY with predefined SL & TP.")
+
+// ALERT 2 — SELL ENTRY  (all setup types, toggle: alertOnEntry)
+alertcondition(alertOnEntry and sellCondition, title = "🔴 ENTRY: Institutional SELL Signal", message = "🔴 SELL SIGNAL | {{ticker}} {{interval}}\nPrice: {{close}}\nSetup: Institutional Supply / Trend Continuation\nAction: Execute SELL/SHORT with predefined SL & TP.")
+
+// ALERT 3 — LONG Take Profit Hit  (toggle: alertOnExit)
+alertcondition(alertOnExit and _longTPHit, title = "🎯 EXIT: LONG Take Profit HIT ✅", message = "🎯 LONG TP HIT ✅ | {{ticker}} {{interval}}\nPrice: {{close}}\nTarget reached. Book profits and exit.")
+
+// ALERT 4 — SHORT Take Profit Hit  (toggle: alertOnExit)
+alertcondition(alertOnExit and _shortTPHit, title = "🎯 EXIT: SHORT Take Profit HIT ✅", message = "🎯 SHORT TP HIT ✅ | {{ticker}} {{interval}}\nPrice: {{close}}\nTarget reached. Book profits and cover.")
+
+// ALERT 5 — LONG Stop Loss Hit  (toggle: alertOnExit)
+alertcondition(alertOnExit and _longSLHit, title = "🛑 EXIT: LONG Stop Loss HIT ❌", message = "🛑 LONG SL HIT ❌ | {{ticker}} {{interval}}\nPrice: {{close}}\nStop Loss triggered. Exit position immediately.")
+
+// ALERT 6 — SHORT Stop Loss Hit  (toggle: alertOnExit)
+alertcondition(alertOnExit and _shortSLHit, title = "🛑 EXIT: SHORT Stop Loss HIT ❌", message = "🛑 SHORT SL HIT ❌ | {{ticker}} {{interval}}\nPrice: {{close}}\nStop Loss triggered. Cover position immediately.")
+
+// ALERT 7 — Break-Even Activated (Long OR Short)  (toggle: alertOnBE)
+alertcondition(alertOnBE and _beActivated, title = "🛡️ RISK-FREE: Break-Even SL Activated", message = "🛡️ BREAK-EVEN ACTIVATED | {{ticker}} {{interval}}\nPrice: {{close}}\nStop Loss moved to Entry Price. Trade is now RISK-FREE.")
+
+// ALERT 8 — Price Entered DEMAND Zone  (toggle: alertOnZone)
+alertcondition(alertOnZone and _enteredDemand, title = "📦 ZONE: Price entered DEMAND (BUY) Zone", message = "📦 DEMAND ZONE ENTERED | {{ticker}} {{interval}}\nPrice: {{close}}\nPre-signal alert: Price inside Demand Zone. Watch for wick rejection and RSI confirmation.")
+
+// ALERT 9 — Price Entered SUPPLY Zone  (toggle: alertOnZone)
+alertcondition(alertOnZone and _enteredSupply, title = "📦 ZONE: Price entered SUPPLY (SELL) Zone", message = "📦 SUPPLY ZONE ENTERED | {{ticker}} {{interval}}\nPrice: {{close}}\nPre-signal alert: Price inside Supply Zone. Watch for rejection and RSI confirmation.")
+
+// ALERT 10 — Bullish BREAKOUT above Supply  (toggle: alertOnBreak)
+alertcondition(alertOnBreak and _supBreakout, title = "🚀 BREAKOUT: Close above SUPPLY Zone", message = "🚀 SUPPLY BREAKOUT | {{ticker}} {{interval}}\nPrice: {{close}}\nCandle closed above Supply. Zone flipped to Demand. Await retest.")
+
+// ALERT 11 — Bearish BREAKDOWN below Demand  (toggle: alertOnBreak)
+alertcondition(alertOnBreak and _demBreakdown, title = "⬇️ BREAKDOWN: Close below DEMAND Zone", message = "⬇️ DEMAND BREAKDOWN | {{ticker}} {{interval}}\nPrice: {{close}}\nCandle closed below Demand. Zone flipped to Supply. Await retest.")
+
+// ALERT 12 — EMA Cloud → BULL Trend Flip  (toggle: alertOnTrend)
+alertcondition(alertOnTrend and _bullFlip, title = "📈 TREND FLIP: EMA Cloud turned BULLISH", message = "📈 BULL TREND FLIP | {{ticker}} {{interval}}\nPrice: {{close}}\nEMA Cloud flipped Bullish. Trend bias shifted to Long.")
+
+// ALERT 13 — EMA Cloud → BEAR Trend Flip  (toggle: alertOnTrend)
+alertcondition(alertOnTrend and _bearFlip, title = "📉 TREND FLIP: EMA Cloud turned BEARISH", message = "📉 BEAR TREND FLIP | {{ticker}} {{interval}}\nPrice: {{close}}\nEMA Cloud flipped Bearish. Trend bias shifted to Short.")
+
+// ALERT 14 — News Shock Emergency Exit  (toggle: alertOnNews)
+alertcondition(alertOnNews and (triggeredNewsExitLong or triggeredNewsExitShort), title = "⚠️ EMERGENCY EXIT: News Shock / Structural Failure", message = "⚠️ NEWS SHOCK EXIT | {{ticker}} {{interval}}\nPrice: {{close}}\nStructural failure or volatility spike. Emergency exit active.")
+
+//──────────────────────────────────────────────────────────────────────────────
+// DYNAMIC WEBHOOK / TELEGRAM ALERT() DISPATCHER
+// Triggers when user selects "Any alert() function call" in TradingView alert dialog
+// Includes live dynamic calculated prices, Stop Loss, Take Profit & MTF status
+//──────────────────────────────────────────────────────────────────────────────
+f_dispatchDynamicAlerts() =>
+    if alertOnEntry and buyCondition
+        alert("🟢 BUY SIGNAL | " + syminfo.ticker + " " + timeframe.period + "\nSetup: " + _buySetup + _sizeNote + "\nEntry: " + str.tostring(close, "#.##") + " | SL: " + str.tostring(stopLossPrice, "#.##") + " | TP: " + str.tostring(takeProfit1, "#.##") + "\nRSI: " + str.tostring(rsiVal, "#.#") + " | Trend: " + (isEmaBull ? "BULL" : isEmaBear ? "BEAR" : "NEUTRAL") + " | Conf: " + (supIsConfluence ? "MTF✅" : "Single-TF"), alert.freq_once_per_bar_close)
+
+    if alertOnEntry and sellCondition
+        alert("🔴 SELL SIGNAL | " + syminfo.ticker + " " + timeframe.period + "\nSetup: " + _sellSetup + _sizeNote + "\nEntry: " + str.tostring(close, "#.##") + " | SL: " + str.tostring(stopLossPrice, "#.##") + " | TP: " + str.tostring(takeProfit1, "#.##") + "\nRSI: " + str.tostring(rsiVal, "#.#") + " | Trend: " + (isEmaBear ? "BEAR" : isEmaBull ? "BULL" : "NEUTRAL") + " | Conf: " + (resIsConfluence ? "MTF✅" : "Single-TF"), alert.freq_once_per_bar_close)
+
+    if alertOnExit and _longTPHit
+        alert("🎯 LONG TP HIT ✅ | " + syminfo.ticker + " " + timeframe.period + "\nTP Reached: " + str.tostring(takeProfit1[1], "#.##") + " | Entry was: " + str.tostring(entryPrice[1], "#.##") + " | R:R = 1:" + str.tostring(riskRewardRatio, "#.#") + "\n✅ Book profit. Wait for next clean setup.", alert.freq_once_per_bar_close)
+
+    if alertOnExit and _shortTPHit
+        alert("🎯 SHORT TP HIT ✅ | " + syminfo.ticker + " " + timeframe.period + "\nTP Reached: " + str.tostring(takeProfit1[1], "#.##") + " | Entry was: " + str.tostring(entryPrice[1], "#.##") + " | R:R = 1:" + str.tostring(riskRewardRatio, "#.#") + "\n✅ Book profit. Wait for next clean setup.", alert.freq_once_per_bar_close)
+
+    if alertOnExit and _longSLHit
+        alert("🛑 LONG SL HIT ❌ | " + syminfo.ticker + " " + timeframe.period + "\nSL Level: " + str.tostring(stopLossPrice[1], "#.##") + " | Entry was: " + str.tostring(entryPrice[1], "#.##") + "\n❌ Exit now. Do not average down.", alert.freq_once_per_bar_close)
+
+    if alertOnExit and _shortSLHit
+        alert("🛑 SHORT SL HIT ❌ | " + syminfo.ticker + " " + timeframe.period + "\nSL Level: " + str.tostring(stopLossPrice[1], "#.##") + " | Entry was: " + str.tostring(entryPrice[1], "#.##") + "\n❌ Exit now. Do not average up.", alert.freq_once_per_bar_close)
+
+    if alertOnBE and _beActivated
+        alert("🛡️ BREAK-EVEN ACTIVATED | " + syminfo.ticker + " " + timeframe.period + "\nDirection: " + (tradeState == "LONG" ? "LONG" : "SHORT") + " | SL moved to entry: " + str.tostring(entryPrice, "#.##") + " | TP: " + str.tostring(takeProfit1, "#.##") + "\n🛡️ Trade is now RISK-FREE.", alert.freq_once_per_bar_close)
+
+    if alertOnZone and _enteredDemand
+        alert("📦 DEMAND ZONE ENTERED | " + syminfo.ticker + " " + timeframe.period + "\nZone: " + str.tostring(math.min(demandZoneBot, demandZoneTop), "#.##") + " — " + str.tostring(math.max(demandZoneBot, demandZoneTop), "#.##") + " | RSI: " + str.tostring(rsiVal, "#.#") + " | Trend: " + (isEmaBull ? "BULL ✅" : isEmaBear ? "BEAR ⚠️" : "NEUTRAL"), alert.freq_once_per_bar_close)
+
+    if alertOnZone and _enteredSupply
+        alert("📦 SUPPLY ZONE ENTERED | " + syminfo.ticker + " " + timeframe.period + "\nZone: " + str.tostring(math.min(supplyZoneBot, supplyZoneTop), "#.##") + " — " + str.tostring(math.max(supplyZoneBot, supplyZoneTop), "#.##") + " | RSI: " + str.tostring(rsiVal, "#.#") + " | Trend: " + (isEmaBear ? "BEAR ✅" : isEmaBull ? "BULL ⚠️" : "NEUTRAL"), alert.freq_once_per_bar_close)
+
+    if alertOnBreak and _supBreakout
+        alert("🚀 SUPPLY BREAKOUT | " + syminfo.ticker + " " + timeframe.period + "\nClose: " + str.tostring(close, "#.##") + " | Broken Supply: " + str.tostring(supplyZoneTop, "#.##") + "\n⚡ Zone flipped to Demand. Await RETEST dip.", alert.freq_once_per_bar_close)
+
+    if alertOnBreak and _demBreakdown
+        alert("⬇️ DEMAND BREAKDOWN | " + syminfo.ticker + " " + timeframe.period + "\nClose: " + str.tostring(close, "#.##") + " | Broken Demand: " + str.tostring(demandZoneBot, "#.##") + "\n⚡ Zone flipped to Supply. Await RETEST rally.", alert.freq_once_per_bar_close)
+
+    if alertOnTrend and _bullFlip
+        alert("📈 BULL TREND FLIP | " + syminfo.ticker + " " + timeframe.period + "\nFast EMA (" + str.tostring(emaFast, "#.##") + ") > Slow EMA (" + str.tostring(emaSlow, "#.##") + ") | Price: " + str.tostring(close, "#.##") + "\n✅ Bias shifts BULLISH.", alert.freq_once_per_bar_close)
+
+    if alertOnTrend and _bearFlip
+        alert("📉 BEAR TREND FLIP | " + syminfo.ticker + " " + timeframe.period + "\nFast EMA (" + str.tostring(emaFast, "#.##") + ") < Slow EMA (" + str.tostring(emaSlow, "#.##") + ") | Price: " + str.tostring(close, "#.##") + "\n🔴 Bias shifts BEARISH.", alert.freq_once_per_bar_close)
+
+    if alertOnNews and (triggeredNewsExitLong or triggeredNewsExitShort)
+        alert("⚠️ NEWS SHOCK EXIT | " + syminfo.ticker + " " + timeframe.period + "\nDirection: " + (triggeredNewsExitLong ? "LONG" : "SHORT") + " | Close: " + str.tostring(close, "#.##") + " | Entry was: " + str.tostring(entryPrice[1], "#.##") + "\n⚠️ Structural failure or spike detected. Exit immediately.", alert.freq_once_per_bar_close)
+
+
+
+f_dispatchDynamicAlerts()
+
+// --- Option Movement Velocity & Liquidity Evaluation ---
+optAtrPct   = close > 0 ? (currentAtr / close * 100.0) : 0.0
+optVolAvg   = ta.sma(volume, 20)
+optVolRatio = (not na(optVolAvg) and optVolAvg > 0) ? (volume / optVolAvg) : 1.0
+
+isOptHighBeta  = optAtrPct >= 2.0 and optVolRatio >= 0.7
+isOptSluggish  = optAtrPct < 1.2 or (optVolAvg > 0 and optVolRatio < 0.3)
+
+optMovementText = isOptHighBeta ? "🔥 FAST DELTA | HIGH EXPANSION" : isOptSluggish ? "⚠️ SLUGGISH | SWITCH TO ATM" : "✅ NORMAL FLOW | TRADEABLE"
+color optMovementBg = isOptHighBeta ? color.new(#00C853, 0) : isOptSluggish ? color.new(#D50000, 0) : color.new(#2563EB, 0)
+
+// --- Confluence Trend Cohesion Score (-100% to +100%) ---
+int confScore = 0
+if isEmaBull
+    confScore += 20
+else if isEmaBear
+    confScore -= 20
+
+if not na(benchHigh) and close > benchHigh
+    confScore += 20
+else if not na(benchLow) and close < benchLow
+    confScore -= 20
+
+// Adapt confluence checks to the active tier's higher timeframes
+htf1H = isTier4 ? lastMHigh : isTier3 ? lastWHigh : lastDHigh
+htf1L = isTier4 ? lastMLow  : isTier3 ? lastWLow  : lastDLow
+if not na(htf1H) and not na(htf1L)
+    if close > (htf1H + htf1L) * 0.5
+        confScore += 20
+    else
+        confScore -= 20
+
+htf2H = isTier4 ? lastWHigh : isTier3 ? lastDHigh : last4HHigh
+htf2L = isTier4 ? lastWLow  : isTier3 ? lastDLow  : last4HLow
+if not na(htf2H) and not na(htf2L)
+    if close > (htf2H + htf2L) * 0.5
+        confScore += 20
+    else
+        confScore -= 20
+
+if rsiVal > 50
+    confScore += 20
+else
+    confScore -= 20
+
+confStr = confScore >= 50 ? "🟢 STRONG BULL (" + str.tostring(confScore) + "%)" : confScore <= -50 ? "🔴 STRONG BEAR (" + str.tostring(math.abs(confScore)) + "%)" : "🟡 NEUTRAL (" + str.tostring(confScore) + "%)"
+
+//=============================================================================
+// 9. UMX VYUHA (व्यूह) — INSTITUTIONAL INTELLIGENCE HUD MATRIX
+//=============================================================================
+
+var table hud = table.new(position.top_right, 2, 12, bgcolor=color.new(#0D1117, 0), border_color=color.new(#21262D, 0), border_width=1)
+
+f_renderHUDMatrix() =>
+    if showHUD and (barstate.islast or barstate.islastconfirmedhistory)
+        tablePos = hudPosition == "Top Right" ? position.top_right : hudPosition == "Bottom Right" ? position.bottom_right : hudPosition == "Top Left" ? position.top_left : position.bottom_left
+        table.set_position(hud, tablePos)
+        table.clear(hud, 0, 0, 1, 11)
+
+        tSize = (hudTextSize == "Medium (Readable)" or hudTextSize == "Medium") ? size.normal : hudTextSize == "Small" ? size.small : size.tiny
+        headerTitle = isOptionActive ? "🏹 VYUHA (OPTION)" : "🏹 UMX VYUHA"
+
+        // Context-Aware Action Guidance (Targets front-run entrance of opposing zone!)
+        distToDemand = not na(demandZoneTop) ? (close - demandZoneTop) : na
+        distToSupply = not na(supplyZoneBot) ? (supplyZoneBot - close) : na
+        actionText = ""
+        color actionBg = color.new(#21262D, 0)
+
+        targetSupplyPrice = nz(supplyZoneBot, resAnchor)
+        targetDemandPrice = nz(demandZoneTop, supAnchor)
+
+        if isSqueezeChop
+            actionText := "⚠️ SQUEEZED (<1.5 ATR) | NO TRADE"
+            actionBg   := color.new(#374151, 0)
+        else if inBuyZone
+            if isEmaBear
+                actionText := "⚠️ AT DEMAND | BEAR TREND | WAIT REVERSAL"
+                actionBg   := color.new(#F57F17, 0)
+            else
+                actionText := "🟢 IN DEMAND 1 | Target: " + str.tostring(targetSupplyPrice, "#.#")
+                actionBg   := color.new(#00C853, 0)
+        else if inSellZone
+            if isEmaBull
+                actionText := "🟠 AT SUPPLY 1 | BULL TREND | WATCH BREAKOUT"
+                actionBg   := color.new(#E65100, 0)
+            else
+                actionText := "🔴 IN SUPPLY 1 | Target: " + str.tostring(targetDemandPrice, "#.#")
+                actionBg   := color.new(#D50000, 0)
+        else if not na(distToDemand) and distToDemand > 0 and distToDemand <= (currentAtr * 1.5)
+            actionText := "🟡 NEAR DEMAND | Watch Buy"
+            actionBg   := color.new(#F57F17, 0)
+        else if not na(distToSupply) and distToSupply > 0 and distToSupply <= (currentAtr * 1.5)
+            actionText := "🟠 NEAR SUPPLY | Target: " + str.tostring(targetSupplyPrice, "#.#")
+            actionBg   := color.new(#E65100, 0)
+        else if not na(benchLow) and close < benchLow
+            if not na(demandZoneBot) and close < demandZoneBot
+                actionText := "⚠️ DEMAND 1 BROKE → Tgt 2: " + str.tostring(sup2Anchor, "#.#")
+                actionBg   := color.new(#B71C1C, 0)
+            else
+                actionText := "⚠️ DEMAND BROKE → Tgt: " + str.tostring(targetDemandPrice, "#.#")
+                actionBg   := color.new(#D50000, 0)
+        else if not na(benchHigh) and close > benchHigh
+            if not na(supplyZoneTop) and close > supplyZoneTop
+                actionText := "🚀 SUPPLY 1 BROKE → Tgt 2: " + str.tostring(res2Anchor, "#.#")
+                actionBg   := color.new(#00E676, 0)
+            else
+                actionText := "🚀 SUPPLY BROKE → Tgt: " + str.tostring(targetSupplyPrice, "#.#")
+                actionBg   := color.new(#00C853, 0)
+        else
+            actionText := "⚪ MID ZONE | S: " + str.tostring(targetDemandPrice, "#.#") + " R: " + str.tostring(targetSupplyPrice, "#.#")
+            actionBg   := color.new(#21262D, 0)
+
+        // Active Live Trade Display
+        bool hasActiveTrade = tradeState != "FLAT"
+        livePts = tradeState == "LONG" ? (close - entryPrice) : tradeState == "SHORT" ? (entryPrice - close) : 0.0
+        bool isAtBE = tradeState == "LONG" ? (stopLossPrice >= entryPrice) : tradeState == "SHORT" ? (stopLossPrice <= entryPrice) : false
+        liveTradeStr = (tradeState == "LONG" ? "🟢 LONG @ " : "🔴 SHORT @ ") + str.tostring(entryPrice, priceFmt) + " (" + (livePts >= 0 ? "+" : "") + str.tostring(livePts, priceFmt) + " pts)" + (isAtBE ? " [BE 🛡️]" : "")
+
+        // Dedicated Entry, Target & SL Level String for HUD Table
+        string tradeLevelsStr = ""
+        string tgtSlLabel = hasActiveTrade ? "Target & SL" : (inBuyZone or inSellZone ? "Setup Tgt / SL" : "Trade Tgt / SL")
+        if hasActiveTrade
+            tradeLevelsStr := "🎯 " + str.tostring(takeProfit1, priceFmt) + " | 🛑 " + str.tostring(stopLossPrice, priceFmt)
+        else if inBuyZone and not na(demSL)
+            tradeLevelsStr := "Entry: " + str.tostring(close, priceFmt) + " | 🎯 " + str.tostring(targetSupplyPrice, priceFmt) + " | 🛑 " + str.tostring(demSL, priceFmt)
+        else if inSellZone and not na(supSL)
+            tradeLevelsStr := "Entry: " + str.tostring(close, priceFmt) + " | 🎯 " + str.tostring(targetDemandPrice, priceFmt) + " | 🛑 " + str.tostring(supSL, priceFmt)
+        else if not na(entryPrice) and not na(takeProfit1) and not na(stopLossPrice)
+            tradeLevelsStr := "Last: " + str.tostring(entryPrice, priceFmt) + " | 🎯 " + str.tostring(takeProfit1, priceFmt) + " | 🛑 " + str.tostring(stopLossPrice, priceFmt)
+        else
+            tradeLevelsStr := "🎯 R: " + str.tostring(targetSupplyPrice, priceFmt) + " | 🛑 S: " + str.tostring(targetDemandPrice, priceFmt)
+
+        // Regime & Performance
+        cloudStatusText = isEmaNeutral ? "⚪ NO-TRADE (CHOP)" : isEmaBull ? "🟢 BULL TREND" : "🔴 BEAR TREND"
+        cloudStatusBg   = isEmaNeutral ? color.new(#374151, 0) : isEmaBull ? color.new(#00C853, 0) : color.new(#D50000, 0)
+        edgeStr         = totalTrades > 0 ? str.tostring(winRate, "#.#") + "% (" + str.tostring(profitFactor, "#.##") + " PF • " + str.tostring(totalTrades) + "T)" : "Calculating..."
+
+        if hudLayout == "Ultra-Mini (Pill)"
+            // Ultra-Mini: 5 rows
+            table.cell(hud, 0, 0, headerTitle, bgcolor=color.new(#161B22, 0), text_color=color.new(#00E5FF, 0), text_size=tSize)
+            table.cell(hud, 1, 0, cloudStatusText, bgcolor=cloudStatusBg, text_color=color.white, text_size=tSize)
+
+            table.cell(hud, 0, 1, hasActiveTrade ? "Position" : "Action", bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+            table.cell(hud, 1, 1, hasActiveTrade ? liveTradeStr : actionText, bgcolor=hasActiveTrade ? color.new(#1F2937, 0) : actionBg, text_color=color.white, text_size=tSize)
+
+            table.cell(hud, 0, 2, tgtSlLabel, bgcolor=color.new(#161B22, 0), text_color=color.new(#FFD600, 0), text_size=tSize)
+            table.cell(hud, 1, 2, tradeLevelsStr, bgcolor=color.new(#1F2937, 0), text_color=color.white, text_size=tSize)
+
+            miniBenchLabel = isOptionActive ? "Movement" : (isTier4 ? "PWH / PWL" : "PDH / PDL")
+            miniBenchVal   = isOptionActive ? optMovementText : (str.tostring(benchHigh, "#.##") + " / " + str.tostring(benchLow, "#.##"))
+            table.cell(hud, 0, 3, miniBenchLabel, bgcolor=color.new(#161B22, 0), text_color=color.new(#FFD600, 0), text_size=tSize)
+            table.cell(hud, 1, 3, miniBenchVal, bgcolor=isOptionActive ? optMovementBg : color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+            table.cell(hud, 0, 4, "Edge (1:2)", bgcolor=color.new(#161B22, 0), text_color=color.new(#00E676, 0), text_size=tSize)
+            table.cell(hud, 1, 4, edgeStr, bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+        else if hudLayout == "Compact (Pro)"
+            // Compact (Pro): 8 rows, consolidated and ultra sleek
+            table.cell(hud, 0, 0, headerTitle, bgcolor=color.new(#161B22, 0), text_color=color.new(#00E5FF, 0), text_size=tSize)
+            table.cell(hud, 1, 0, "STATUS & FLOW", bgcolor=color.new(#161B22, 0), text_color=color.new(#94A3B8, 0), text_size=tSize)
+
+            table.cell(hud, 0, 1, hasActiveTrade ? "Position" : "Action Zone", bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+            table.cell(hud, 1, 1, hasActiveTrade ? liveTradeStr : actionText, bgcolor=hasActiveTrade ? color.new(#1F2937, 0) : actionBg, text_color=color.white, text_size=tSize)
+
+            table.cell(hud, 0, 2, tgtSlLabel, bgcolor=color.new(#161B22, 0), text_color=color.new(#FFD600, 0), text_size=tSize)
+            table.cell(hud, 1, 2, tradeLevelsStr, bgcolor=color.new(#1F2937, 0), text_color=color.white, text_size=tSize)
+
+            row3Label = isOptionActive ? "Option Flow" : "Confluence"
+            row3Val   = isOptionActive ? optMovementText : confStr
+            color row3Bg = isOptionActive ? optMovementBg : color.new(#161B22, 0)
+            table.cell(hud, 0, 3, row3Label, bgcolor=color.new(#161B22, 0), text_color=color.new(#00E5FF, 0), text_size=tSize)
+            table.cell(hud, 1, 3, row3Val, bgcolor=row3Bg, text_color=color.white, text_size=tSize)
+
+            table.cell(hud, 0, 4, "Trend & Edge", bgcolor=color.new(#161B22, 0), text_color=color.new(#00E676, 0), text_size=tSize)
+            table.cell(hud, 1, 4, cloudStatusText + " • " + edgeStr, bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+            row5Label = (isTier4 or isTier3) ? "Prev Week (H/L)" : "Prev Day (H/L)"
+            row5Val   = str.tostring(benchHigh, "#.##") + " | " + str.tostring(benchLow, "#.##")
+            table.cell(hud, 0, 5, row5Label, bgcolor=color.new(#161B22, 0), text_color=color.new(#FFD600, 0), text_size=tSize)
+            table.cell(hud, 1, 5, row5Val, bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+            row6Label = isTier4 ? "M / W / D Highs" : isTier3 ? "W / D / 4H Highs" : isTier2 ? "D / 4H / 2H Highs" : "4H / 2H / 1H Highs"
+            string row6Val = ""
+            if isTier4
+                row6Val := str.tostring(lastMHigh, priceFmt) + " | " + str.tostring(lastWHigh, priceFmt) + " | " + str.tostring(lastDHigh, priceFmt)
+            else if isTier3
+                row6Val := str.tostring(lastWHigh, priceFmt) + " | " + str.tostring(lastDHigh, priceFmt) + " | " + str.tostring(last4HHigh, priceFmt)
+            else if isTier2
+                row6Val := str.tostring(lastDHigh, priceFmt) + " | " + str.tostring(last4HHigh, priceFmt) + " | " + str.tostring(last2HHigh, priceFmt)
+            else
+                row6Val := str.tostring(last4HHigh, priceFmt) + " | " + str.tostring(last2HHigh, priceFmt) + " | " + str.tostring(last1HHigh, priceFmt)
+            table.cell(hud, 0, 6, row6Label, bgcolor=color.new(#161B22, 0), text_color=color.new(#FF6B6B, 0), text_size=tSize)
+            table.cell(hud, 1, 6, row6Val, bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+            row7Label = isTier4 ? "M / W / D Lows" : isTier3 ? "W / D / 4H Lows" : isTier2 ? "D / 4H / 2H Lows" : "4H / 2H / 1H Lows"
+            string row7Val = ""
+            if isTier4
+                row7Val := str.tostring(lastMLow, priceFmt) + " | " + str.tostring(lastWLow, priceFmt) + " | " + str.tostring(lastDLow, priceFmt)
+            else if isTier3
+                row7Val := str.tostring(lastWLow, priceFmt) + " | " + str.tostring(lastDLow, priceFmt) + " | " + str.tostring(last4HLow, priceFmt)
+            else if isTier2
+                row7Val := str.tostring(lastDLow, priceFmt) + " | " + str.tostring(last4HLow, priceFmt) + " | " + str.tostring(last2HLow, priceFmt)
+            else
+                row7Val := str.tostring(last4HLow, priceFmt) + " | " + str.tostring(last2HLow, priceFmt) + " | " + str.tostring(last1HLow, priceFmt)
+            table.cell(hud, 0, 7, row7Label, bgcolor=color.new(#161B22, 0), text_color=color.new(#4EFAAA, 0), text_size=tSize)
+            table.cell(hud, 1, 7, row7Val, bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+        else
+            // Full Matrix (Detailed 10-row layout)
+            table.cell(hud, 0, 0, headerTitle + " MATRIX", bgcolor=color.new(#1E293B, 0), text_color=color.new(#00E5FF, 0), text_size=tSize)
+            table.cell(hud, 1, 0, "PRICE / STATUS", bgcolor=color.new(#1E293B, 0), text_color=color.white, text_size=tSize)
+
+            if isTier4
+                table.cell(hud, 0, 1, "Month Swings (1Y)", bgcolor=color.new(#161B22, 0), text_color=color.new(#D500F9, 0), text_size=tSize)
+                table.cell(hud, 1, 1, "H: " + str.tostring(lastMHigh, "#.##") + " | L: " + str.tostring(lastMLow, "#.##"), bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+                table.cell(hud, 0, 2, "Week Swings (1Y)", bgcolor=color.new(#161B22, 0), text_color=color.new(#FF6D00, 0), text_size=tSize)
+                table.cell(hud, 1, 2, "H: " + str.tostring(lastWHigh, "#.##") + " | L: " + str.tostring(lastWLow, "#.##"), bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+                table.cell(hud, 0, 3, "Daily Swings (4M)", bgcolor=color.new(#161B22, 0), text_color=color.new(#FFA726, 0), text_size=tSize)
+                table.cell(hud, 1, 3, "H: " + str.tostring(lastDHigh, "#.##") + " | L: " + str.tostring(lastDLow, "#.##"), bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+                table.cell(hud, 0, 4, "Prev Month (PMH/PML)", bgcolor=color.new(#161B22, 0), text_color=color.new(#E040FB, 0), text_size=tSize)
+                table.cell(hud, 1, 4, "PMH: " + str.tostring(pm_high, "#.##") + " | PML: " + str.tostring(pm_low, "#.##"), bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+                table.cell(hud, 0, 5, "Prev Week (PWH/PWL)", bgcolor=color.new(#161B22, 0), text_color=color.new(#FFD600, 0), text_size=tSize)
+                table.cell(hud, 1, 5, "PWH: " + str.tostring(pw_high, "#.##") + " | PWL: " + str.tostring(pw_low, "#.##"), bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+            else if isTier3
+                table.cell(hud, 0, 1, "Week Swings (1Y)", bgcolor=color.new(#161B22, 0), text_color=color.new(#FF6D00, 0), text_size=tSize)
+                table.cell(hud, 1, 1, "H: " + str.tostring(lastWHigh, "#.##") + " | L: " + str.tostring(lastWLow, "#.##"), bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+                table.cell(hud, 0, 2, "Daily Swings (4M)", bgcolor=color.new(#161B22, 0), text_color=color.new(#FFA726, 0), text_size=tSize)
+                table.cell(hud, 1, 2, "H: " + str.tostring(lastDHigh, "#.##") + " | L: " + str.tostring(lastDLow, "#.##"), bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+                table.cell(hud, 0, 3, "4-Hour Swings (2M)", bgcolor=color.new(#161B22, 0), text_color=color.new(#7C4DFF, 0), text_size=tSize)
+                table.cell(hud, 1, 3, "H: " + str.tostring(last4HHigh, "#.##") + " | L: " + str.tostring(last4HLow, "#.##"), bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+                table.cell(hud, 0, 4, "Prev Week (PWH/PWL)", bgcolor=color.new(#161B22, 0), text_color=color.new(#FFD600, 0), text_size=tSize)
+                table.cell(hud, 1, 4, "PWH: " + str.tostring(pw_high, "#.##") + " | PWL: " + str.tostring(pw_low, "#.##"), bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+                table.cell(hud, 0, 5, "Prev Day (PDH/PDL)", bgcolor=color.new(#161B22, 0), text_color=color.new(#00E5FF, 0), text_size=tSize)
+                table.cell(hud, 1, 5, "PDH: " + str.tostring(pd_high, "#.##") + " | PDL: " + str.tostring(pd_low, "#.##"), bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+            else
+                row1Title = isOptionActive ? "Month Swings (Expiry)" : "Daily Swings (4M)"
+                table.cell(hud, 0, 1, row1Title, bgcolor=color.new(#161B22, 0), text_color=color.new(#FFA726, 0), text_size=tSize)
+                table.cell(hud, 1, 1, "H: " + str.tostring(lastDHigh, "#.##") + " | L: " + str.tostring(lastDLow, "#.##"), bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+                row2Title = isOptionActive ? "4-Hour Swings (Expiry)" : "4-Hour Swings (2M)"
+                table.cell(hud, 0, 2, row2Title, bgcolor=color.new(#161B22, 0), text_color=color.new(#7C4DFF, 0), text_size=tSize)
+                table.cell(hud, 1, 2, "H: " + str.tostring(last4HHigh, "#.##") + " | L: " + str.tostring(last4HLow, "#.##"), bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+                row3Title = isOptionActive ? "2-Hour Swings (Expiry)" : "2-Hour Swings (2M)"
+                table.cell(hud, 0, 3, row3Title, bgcolor=color.new(#161B22, 0), text_color=color.new(#00E5FF, 0), text_size=tSize)
+                table.cell(hud, 1, 3, "H: " + str.tostring(last2HHigh, "#.##") + " | L: " + str.tostring(last2HLow, "#.##"), bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+                row4Title = isOptionActive ? "1-Hour Swings (Expiry)" : "1-Hour Swings (2M)"
+                table.cell(hud, 0, 4, row4Title, bgcolor=color.new(#161B22, 0), text_color=color.new(#FF4081, 0), text_size=tSize)
+                table.cell(hud, 1, 4, "H: " + str.tostring(last1HHigh, "#.##") + " | L: " + str.tostring(last1HLow, "#.##"), bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+                table.cell(hud, 0, 5, "Prev Day (PDH/PDL)", bgcolor=color.new(#161B22, 0), text_color=color.new(#FFD600, 0), text_size=tSize)
+                table.cell(hud, 1, 5, "PDH: " + str.tostring(pd_high, "#.##") + " | PDL: " + str.tostring(pd_low, "#.##"), bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+            table.cell(hud, 0, 6, hasActiveTrade ? "Position" : "Action Zone", bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+            table.cell(hud, 1, 6, hasActiveTrade ? liveTradeStr : actionText, bgcolor=hasActiveTrade ? color.new(#1F2937, 0) : actionBg, text_color=color.white, text_size=tSize)
+
+            table.cell(hud, 0, 7, tgtSlLabel, bgcolor=color.new(#161B22, 0), text_color=color.new(#FFD600, 0), text_size=tSize)
+            table.cell(hud, 1, 7, tradeLevelsStr, bgcolor=color.new(#1F2937, 0), text_color=color.white, text_size=tSize)
+
+            row8Title = isOptionActive ? "Option Movement" : "EMA Trend (9/21)"
+            row8Val   = isOptionActive ? optMovementText : cloudStatusText
+            color row8Bg = isOptionActive ? optMovementBg : cloudStatusBg
+            table.cell(hud, 0, 8, row8Title, bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+            table.cell(hud, 1, 8, row8Val, bgcolor=row8Bg, text_color=color.white, text_size=tSize)
+
+            winRateStr = totalTrades > 0 ? str.tostring(winRate, "#.#") + "% (" + str.tostring(winTrades) + "W / " + str.tostring(lossTrades) + "L)" : "Calculating..."
+            table.cell(hud, 0, 9, "Win Rate (1:2 R:R)", bgcolor=color.new(#161B22, 0), text_color=color.new(#00E676, 0), text_size=tSize)
+            table.cell(hud, 1, 9, winRateStr, bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+            pfStr = totalTrades > 0 ? str.tostring(profitFactor, "#.##") + " PF (" + str.tostring(totalTrades) + " Trades)" : "No trades yet"
+            table.cell(hud, 0, 10, "Signal Edge / PF", bgcolor=color.new(#161B22, 0), text_color=color.new(#00E5FF, 0), text_size=tSize)
+            table.cell(hud, 1, 10, pfStr, bgcolor=color.new(#161B22, 0), text_color=color.white, text_size=tSize)
+
+
+// Execute HUD Matrix Rendering
+f_renderHUDMatrix()

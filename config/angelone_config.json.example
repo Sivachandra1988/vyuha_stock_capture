@@ -1,0 +1,6 @@
+{
+    "api_key": "YOUR_ANGELONE_API_KEY",
+    "client_code": "YOUR_CLIENT_CODE",
+    "password": "YOUR_PIN_OR_PASSWORD",
+    "totp_key": "YOUR_TOTP_SECRET_KEY"
+}

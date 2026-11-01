@@ -1,0 +1,34 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Credentials & Sensitive Configurations
+config/angelone_config.json
+config/zerodha_config.json
+data/angelone_session.json
+data/angelone_tokens.json
+.env
+
+# Large Cache & Data Downloads
+data/backtest_cache/
+data/OpenAPIScripMaster.json
+*.parquet
+
+# Logs & Temporary Files
+*.log
+logs/
+*.tmp
+eod_test.log
+backtest_final.log
+backtest_new.log
+test.html
+test_tv.html
+fix*.py
+report.txt
+
+# OS & Editor files
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
