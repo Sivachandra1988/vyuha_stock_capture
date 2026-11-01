@@ -50,3 +50,4 @@ echo.
 echo [INFO] Trader Pilot process terminated.
 pause
 endlocal
+

@@ -13,6 +13,7 @@ This guide explains how to install, run, and access the **UMX Vyuha Institutiona
 6. [Mobile Hotspot Mode (No Wi-Fi Router Needed)](#6-mobile-hotspot-mode-no-wi-fi-router-needed)
 7. [Keeping Termux Alive in the Background (24/7)](#7-keeping-termux-alive-in-the-background-247)
 8. [Termux Navigation & Keyboard Shortcuts](#8-termux-navigation--keyboard-shortcuts)
+9. [Troubleshooting & Common Errors](#9-troubleshooting--common-errors)
 
 ---
 
@@ -101,6 +102,16 @@ python3 breakout_scanner.py
 The project includes an interactive web dashboard with real-time charts, watchlist management, and active P&L tracking, integrated with the continuous scanner engine.
 
 ### Quick Launch Scripts:
+
+* **On Mobile / Linux / Termux (Recommended):**
+  ```bash
+  # Run directly with bash (avoids permission denied errors):
+  bash start_dashboard.sh
+
+  # Custom port (e.g. 9000):
+  bash start_dashboard.sh 9000
+  ```
+
 * **On Windows (Double-click or run from CMD):**
   ```cmd
   # Interactive prompt (defaults to 8080):
@@ -109,21 +120,10 @@ The project includes an interactive web dashboard with real-time charts, watchli
   # Direct custom port:
   start_dashboard.bat 9000
   ```
-* **On Mobile / Linux / Termux:**
-  ```bash
-  # Make executable (first time only):
-  chmod +x start_dashboard.sh
 
-  # Default (Port 8080):
-  ./start_dashboard.sh
-
-  # Custom port (e.g. 9000):
-  ./start_dashboard.sh 9000
-  ```
-
-### Manual Command:
+### Direct Python Command:
 ```bash
-python3 src/dashboard/server.py --port 8080 --host 0.0.0.0
+python3 dashboard_server.py --port 8080 --host 0.0.0.0
 ```
 
 ### Banner Output:
@@ -148,7 +148,7 @@ You can monitor and manage your trading scanner from your laptop while your phon
 1. **Connect to Same Wi-Fi:** Ensure your laptop and Android phone are connected to the same home or office Wi-Fi network.
 2. **Start the Dashboard on Mobile:**
    ```bash
-   python3 src/dashboard/server.py
+   bash start_dashboard.sh
    ```
 3. **Note the Laptop URL:** Look at the terminal output on your phone for the `Laptop / Wi-Fi URL` (e.g. `http://192.168.1.15:8080`).
 4. **Open Browser on Laptop:** Open Chrome, Edge, or Firefox on your laptop and navigate to:
@@ -167,7 +167,7 @@ If you are travelling or don't have a home Wi-Fi router:
 2. **Connect your Laptop** to your phone's Wi-Fi Hotspot.
 3. On your phone, start the server:
    ```bash
-   python3 src/dashboard/server.py
+   bash start_dashboard.sh
    ```
 4. In Android Hotspot mode, the phone's gateway IP address is typically:
    ```
@@ -213,3 +213,36 @@ Termux provides an extra key bar directly above your on-screen keyboard:
 | **Swipe from Left Edge** | Open Termux session drawer to create **New Session** or switch windows |
 | **`killall -9 python python3`** | Emergency kill all Python processes |
 
+---
+
+## 9. Troubleshooting & Common Errors
+
+### A. `Permission denied: ./start_dashboard.sh`
+* **Cause:** The script does not have execute permissions (`+x`) on Android's filesystem.
+* **Fix:** Run with `bash` directly (works 100% of the time):
+  ```bash
+  bash start_dashboard.sh
+  ```
+  Or grant execute permission:
+  ```bash
+  chmod +x start_dashboard.sh
+  ```
+
+### B. `Permission denied` on Port Binding
+* **Cause:** Ports below 1024 (e.g. port 80 or 443) require root privileges in Linux/Android.
+* **Fix:** Use standard user ports **1024 or higher** (e.g. `8080`, `9000`, `5000`):
+  ```bash
+  bash start_dashboard.sh 8080
+  ```
+
+### C. Laptop Cannot Open URL (`Connection Refused` or `Timeout`)
+* **Check 1:** Ensure both your phone and laptop are connected to the **exact same Wi-Fi router** or phone's **Mobile Hotspot**.
+* **Check 2:** Check if your router has "AP Isolation" or "Client Isolation" turned on (if so, turn on your phone's Mobile Hotspot instead).
+* **Check 3:** Verify you typed `http://` and not `https://` (e.g. `http://192.168.1.15:8080`).
+
+### D. `Market is CLOSED (Weekend). Process released.`
+* The engine automatically stops outside trading hours (9:15 AM - 3:30 PM, Mon-Fri).
+* To force-run a scan cycle immediately regardless of day/time, use:
+  ```bash
+  python3 breakout_scanner.py --force
+  ```
