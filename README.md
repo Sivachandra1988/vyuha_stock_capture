@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/brand_icon.jpg" width="220" style="border-radius: 50%; box-shadow: 0 4px 20px rgba(0,0,0,0.5);" alt="VYUHA Brand Icon"/>
+</p>
+
 # 🏛️ UMX VYUHA — Institutional Stock Capture & Trading Engine
 
 > **Algorithmic Multi-Timeframe Confluence Clustering | 40-Bin FRVP Volume POC | Zone-Anchored AVWAP | Anti-Trap Wicks | Real-Time Telegram Alerts & Web Dashboard**

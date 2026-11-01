@@ -100,6 +100,18 @@ def get_dashboard():
         return FileResponse(index_path)
     return {"message": f"index.html not found at: {index_path}"}
 
+@app.get("/brand_icon.jpg")
+@app.get("/favicon.ico")
+def get_brand_icon():
+    """Serves the official VYUHA brand icon and favicon."""
+    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "brand_icon.jpg")
+    if os.path.exists(icon_path):
+        return FileResponse(icon_path, media_type="image/jpeg")
+    fallback = os.path.join(BASE_DIR, "assets", "brand_icon.jpg")
+    if os.path.exists(fallback):
+        return FileResponse(fallback, media_type="image/jpeg")
+    return {"error": "Brand icon not found"}
+
 @app.get("/api/trades")
 def get_trades():
     """Loads paper trades and updates them with live LTP, projections, Nifty indices, and watchlist."""

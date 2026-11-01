@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/brand_icon.jpg" width="180" style="border-radius: 50%; box-shadow: 0 4px 20px rgba(0,0,0,0.5);" alt="VYUHA Brand Icon"/>
+</p>
+
 # 📱 Mobile Installation & Local Network Access Guide
 
 This guide explains how to install, run, and access the **UMX Vyuha Institutional Trading Engine & Dashboard** entirely from an Android mobile phone, and how to view the interactive dashboard on a laptop or tablet over the same Wi-Fi or mobile hotspot.

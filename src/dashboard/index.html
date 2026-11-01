@@ -4,7 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trader Pilot Breakout Stocks Dashboard</title>
+    <title>VYUHA TRADER-PILOT | Institutional Trading Engine</title>
+    <link rel="icon" type="image/jpeg" href="/brand_icon.jpg">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -82,22 +83,49 @@
             gap: 0.5rem;
         }
 
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .brand-logo-img {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            border: 2px solid #d4af37;
+            box-shadow: 0 0 14px rgba(212, 175, 55, 0.45);
+            object-fit: cover;
+            display: block;
+            flex-shrink: 0;
+        }
+
+        .logo-details {
+            display: flex;
+            flex-direction: column;
+        }
+
         .logo-section h1 {
-            font-size: 1.6rem;
+            font-size: 1.45rem;
             font-weight: 700;
-            background: linear-gradient(135deg, #3b82f6, #10b981);
+            background: linear-gradient(135deg, #f59e0b, #d4af37, #10b981);
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            letter-spacing: 0.04em;
+            margin: 0;
+            line-height: 1.15;
         }
 
         .logo-section p {
             color: var(--text-secondary);
-            font-size: 0.9rem;
+            font-size: 0.75rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
             margin-top: 0.2rem;
+            font-weight: 500;
         }
 
         .header-stats {
@@ -273,12 +301,17 @@
                 justify-content: space-between;
             }
 
+            .brand-logo-img {
+                width: 36px;
+                height: 36px;
+            }
+
             .logo-section h1 {
-                font-size: 1.1rem;
+                font-size: 1.05rem;
             }
 
             .logo-section p {
-                font-size: 0.7rem;
+                font-size: 0.65rem;
             }
 
             .header-stats {
@@ -934,8 +967,11 @@
         <!-- Header -->
         <header>
             <div class="logo-section">
-                <h1>⚡ Aruntra</h1>
-                <p>Automated Swing</p>
+                <img src="/brand_icon.jpg" alt="VYUHA Brand Icon" class="brand-logo-img">
+                <div class="logo-details">
+                    <h1>VYUHA TRADER-PILOT</h1>
+                    <p>Plan • Analyze • Execute • Win</p>
+                </div>
             </div>
             <div class="header-stats">
                 <!-- Nifty Index Widget -->
