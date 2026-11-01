@@ -78,6 +78,11 @@ def save_vyuha_alerts():
 
 def clean_dataframe(df):
     """Flattens MultiIndex columns and ensures standard numeric OHLCV format."""
+    if df is None or len(df) == 0:
+        return pd.DataFrame()
+    if not isinstance(df.columns, pd.MultiIndex) and 'Close' in df.columns and np.issubdtype(df['Close'].dtype, np.number):
+        return df
+
     df = df.copy()
     if isinstance(df.columns, pd.MultiIndex):
         try:
@@ -442,13 +447,28 @@ def run_vyuha_daily_scan(send_telegram_fn=None, custom_tickers=None):
             df['ATR_14'] = calculate_atr(df, 14)
             df['EMA_9'] = calculate_ema(df['Close'], 9)
             df['EMA_21'] = calculate_ema(df['Close'], 21)
+            df['SMA_50'] = df['Close'].rolling(50).mean()
+            df['SMA_200'] = df['Close'].rolling(200).mean()
+            df['Vol_SMA_20'] = df['Volume'].rolling(20).mean()
 
             latest = df.iloc[-1]
             prev = df.iloc[-2]
             c_close = float(latest['Close'])
+            c_open = float(latest['Open'])
+            c_high = float(latest['High'])
+            c_low = float(latest['Low'])
+            c_vol = float(latest['Volume'])
             atr_val = float(latest['ATR_14'])
             if atr_val <= 0:
                 continue
+
+            sma50 = float(latest['SMA_50']) if not pd.isna(latest['SMA_50']) else c_close
+            sma200 = float(latest['SMA_200']) if not pd.isna(latest['SMA_200']) else c_close
+            vol_sma = float(latest['Vol_SMA_20']) if not pd.isna(latest['Vol_SMA_20']) else c_vol
+
+            # Macro Regimes
+            is_bull_regime = c_close >= sma200
+            is_bear_regime = (c_close <= sma200) and (sma50 <= sma200)
 
             # Calculate VYUHA Zones
             zones = calculate_vyuha_zones(df, c_close, atr_val)
@@ -458,17 +478,22 @@ def run_vyuha_daily_scan(send_telegram_fn=None, custom_tickers=None):
             d1 = zones['demand_1']
             s1 = zones['supply_1']
 
-            # Confluence Proximity Criteria:
-            # 1. Price is testing inside or within 0.75 ATR of Demand 1
-            is_at_demand = (c_close >= d1['bot'] - (0.2 * atr_val)) and (c_close <= d1['top'] + (0.75 * atr_val))
-            # 2. Price is testing inside or within 0.75 ATR of Supply 1
-            is_at_supply = (c_close <= s1['top'] + (0.2 * atr_val)) and (c_close >= s1['bot'] - (0.75 * atr_val))
+            c_range = max(c_high - c_low, 0.001)
+            lower_wick_ratio = (min(c_open, c_close) - c_low) / c_range
+            upper_wick_ratio = (c_high - max(c_open, c_close)) / c_range
 
-            # Trend Start Crossover on Daily
-            ema9_prev, ema21_prev = float(prev['EMA_9']), float(prev['EMA_21'])
-            ema9_curr, ema21_curr = float(latest['EMA_9']), float(latest['EMA_21'])
-            is_bull_cloud_flip = (ema9_prev <= ema21_prev) and (ema9_curr > ema21_curr)
-            is_bear_cloud_flip = (ema9_prev >= ema21_prev) and (ema9_curr < ema21_curr)
+            # Confluence Proximity Criteria:
+            # 1. Price is testing inside or within 0.75 ATR of Demand 1 with Anti-Trap confirmation
+            is_at_demand = (c_low <= d1['top'] + (0.5 * atr_val)) and (c_close >= d1['bot'] - (0.2 * atr_val))
+            demand_confirmed = is_at_demand and (lower_wick_ratio >= 0.25) and (upper_wick_ratio <= 0.25) and (c_close >= c_open)
+
+            # 2. Price is testing inside or within 0.75 ATR of Supply 1 with Anti-Trap confirmation
+            is_at_supply = (c_high >= s1['bot'] - (0.5 * atr_val)) and (c_close <= s1['top'] + (0.2 * atr_val))
+            supply_confirmed = is_at_supply and (upper_wick_ratio >= 0.25) and (lower_wick_ratio <= 0.25) and (c_close <= c_open)
+
+            # 3. Runaway News Expansion Breakout (Volume > 2.0x SMA + 20-day high breakout)
+            highs_20d = float(df['High'].iloc[-21:-1].max()) if len(df) >= 21 else c_high
+            is_runaway_breakout = (c_close > highs_20d) and (c_vol >= 2.0 * vol_sma) and (c_close > c_open) and (upper_wick_ratio <= 0.20)
 
             # Role Reversal Check (Broken PDL / PDH test)
             pdl = zones['pdl']
@@ -479,21 +504,19 @@ def run_vyuha_daily_scan(send_telegram_fn=None, custom_tickers=None):
             setup_type = None
             bias = None
 
-            if is_at_demand or is_bull_cloud_flip or is_flipped_supply:
+            if is_bull_regime and (demand_confirmed or is_flipped_supply or is_runaway_breakout):
                 bias = "LONG"
-                if is_at_demand:
+                if is_runaway_breakout:
+                    setup_type = "RUNAWAY_MOMENTUM_BREAKOUT"
+                elif demand_confirmed:
                     setup_type = "DEMAND_1_CONFLUENCE"
-                elif is_bull_cloud_flip:
-                    setup_type = "DAILY_TREND_START_BULL"
                 else:
                     setup_type = "FLIPPED_DEMAND_TEST"
 
-            elif is_at_supply or is_bear_cloud_flip or is_flipped_demand:
+            elif is_bear_regime and (supply_confirmed or is_flipped_demand):
                 bias = "SHORT"
-                if is_at_supply:
+                if supply_confirmed:
                     setup_type = "SUPPLY_1_CONFLUENCE"
-                elif is_bear_cloud_flip:
-                    setup_type = "DAILY_TREND_START_BEAR"
                 else:
                     setup_type = "FLIPPED_SUPPLY_TEST"
 
@@ -640,13 +663,16 @@ def evaluate_intraday_vyuha_setup(ticker, df_intraday, df_daily):
 
     if in_demand_zone and demand_rejection and not is_bull_trap and avwap_bull_confirm:
         entry = c_close
-        sl = zones['dem_retrace']['sl']
+        sl = min(c_low, d1['bot']) - (0.3 * atr_intra)
         risk = entry - sl
-        if risk <= 0 or risk > (3.0 * atr_intra):
-            sl = entry - (1.2 * atr_intra)
+        if risk < (1.5 * atr_intra):
+            sl = entry - (1.5 * atr_intra)
+            risk = entry - sl
+        elif risk > (2.5 * atr_intra):
+            sl = entry - (2.5 * atr_intra)
             risk = entry - sl
 
-        t1 = entry + (2.0 * risk)
+        t1 = entry + (2.2 * risk)
         t2 = zones['supply_1']['bot']
         if t2 <= entry:
             t2 = entry + (3.0 * risk)
@@ -668,8 +694,8 @@ def evaluate_intraday_vyuha_setup(ticker, df_intraday, df_daily):
                 f"━━━━━━━━━━━━━━━━━━\n"
                 f"🎯 *Zone:* `Demand 1 [{d1['bot']:.1f} - {d1['top']:.1f}]`\n"
                 f"⚡ *Entry:* `{entry:.2f}` (Rejection Wick: `{lower_wick_ratio*100:.0f}%`)\n"
-                f"🛑 *Stop-Loss:* `{sl:.2f}` (Risk: `{risk:.2f}` pts)\n"
-                f"🎯 *Target 1 (1:2):* `{t1:.2f}`\n"
+                f"🛑 *Stop-Loss:* `{sl:.2f}` (Risk: `{risk:.2f}` pts | Buffer: 1.5 ATR)\n"
+                f"🎯 *Target 1 (1:2.2):* `{t1:.2f}`\n"
                 f"🏁 *Target 2 (Supply 1):* `{t2:.2f}`\n"
                 f"💎 *AVWAP Slope:* `{'🟢 Accumulation ▲' if is_green_diamond else '⚪ Neutral'}`\n"
                 f"⚡ *Volume POC:* `{poc_price:.2f}`"
@@ -678,18 +704,21 @@ def evaluate_intraday_vyuha_setup(ticker, df_intraday, df_daily):
 
     # 🔴 SHORT SETUP: Price in Supply 1 / Retrace Band + Upper Wick Rejection >= 30% + Red Diamond + Not Bear Trap
     in_supply_zone = (c_high >= s1['bot'] and c_close <= s1['top'])
-    supply_rejection = upper_wick_ratio >= 0.30 and c_close < c_open
+    supply_rejection = upper_wick_ratio >= 0.25 and lower_wick_ratio <= 0.25 and c_close <= c_open
     avwap_bear_confirm = (c_close <= avwap_val) if avwap_val else True
 
     if in_supply_zone and supply_rejection and not is_bear_trap and avwap_bear_confirm:
         entry = c_close
-        sl = zones['sup_retrace']['sl']
+        sl = max(c_high, s1['top']) + (0.3 * atr_intra)
         risk = sl - entry
-        if risk <= 0 or risk > (3.0 * atr_intra):
-            sl = entry + (1.2 * atr_intra)
+        if risk < (1.5 * atr_intra):
+            sl = entry + (1.5 * atr_intra)
+            risk = sl - entry
+        elif risk > (2.5 * atr_intra):
+            sl = entry + (2.5 * atr_intra)
             risk = sl - entry
 
-        t1 = entry - (2.0 * risk)
+        t1 = entry - (2.2 * risk)
         t2 = zones['demand_1']['top']
         if t2 >= entry:
             t2 = entry - (3.0 * risk)
@@ -711,8 +740,8 @@ def evaluate_intraday_vyuha_setup(ticker, df_intraday, df_daily):
                 f"━━━━━━━━━━━━━━━━━━\n"
                 f"🎯 *Zone:* `Supply 1 [{s1['bot']:.1f} - {s1['top']:.1f}]`\n"
                 f"⚡ *Entry:* `{entry:.2f}` (Rejection Wick: `{upper_wick_ratio*100:.0f}%`)\n"
-                f"🛑 *Stop-Loss:* `{sl:.2f}` (Risk: `{risk:.2f}` pts)\n"
-                f"🎯 *Target 1 (1:2):* `{t1:.2f}`\n"
+                f"🛑 *Stop-Loss:* `{sl:.2f}` (Risk: `{risk:.2f}` pts | Buffer: 1.5 ATR)\n"
+                f"🎯 *Target 1 (1:2.2):* `{t1:.2f}`\n"
                 f"🏁 *Target 2 (Demand 1):* `{t2:.2f}`\n"
                 f"💎 *AVWAP Slope:* `{'🔴 Distribution ▼' if not is_green_diamond else '⚪ Neutral'}`\n"
                 f"⚡ *Volume POC:* `{poc_price:.2f}`"

@@ -1,325 +1,40 @@
 [
     {
-        "ticker": "CUMMINSIND",
-        "bias": "SHORT",
-        "setup": "SUPPLY_1_CONFLUENCE",
-        "close": 4452.6,
-        "atr": 129.34,
-        "demand_1": [
-            4219.73,
-            4271.47
-        ],
-        "supply_1": [
-            4515.2,
-            4667.1
-        ],
-        "demand_2": 3896.39,
-        "supply_2": 4964.3,
-        "vol_poc": 4835.31,
-        "date": "2026-11-01"
-    },
-    {
-        "ticker": "TATASTEEL",
-        "bias": "SHORT",
-        "setup": "SUPPLY_1_CONFLUENCE",
-        "close": 167.6,
-        "atr": 4.19,
-        "demand_1": [
-            162.57,
-            164.25
-        ],
-        "supply_1": [
-            168.71,
-            178.2
-        ],
-        "demand_2": 152.09,
-        "supply_2": 187.11,
-        "vol_poc": 184.2,
-        "date": "2026-11-01"
-    },
-    {
-        "ticker": "ADANIPOWER",
+        "ticker": "GRASIM",
         "bias": "LONG",
         "setup": "DEMAND_1_CONFLUENCE",
-        "close": 189.0,
-        "atr": 6.63,
+        "close": 2981.4,
+        "atr": 63.65,
         "demand_1": [
-            175.31,
-            184.59
+            2828.2,
+            2932.8
         ],
         "supply_1": [
-            191.2,
-            205.43
+            3185.18,
+            3371.0
         ],
-        "demand_2": 158.73,
-        "supply_2": 216.1,
-        "vol_poc": 208.46,
+        "demand_2": 2669.07,
+        "supply_2": 3530.13,
+        "vol_poc": 3287.23,
         "date": "2026-11-01"
     },
     {
-        "ticker": "CIPLA",
+        "ticker": "LAURUSLABS",
         "bias": "LONG",
-        "setup": "DEMAND_1_CONFLUENCE",
-        "close": 1378.9,
-        "atr": 28.66,
+        "setup": "RUNAWAY_MOMENTUM_BREAKOUT",
+        "close": 2405.5,
+        "atr": 71.72,
         "demand_1": [
-            1296.4,
-            1366.1
+            2166.0,
+            2244.0
         ],
         "supply_1": [
-            1405.0,
-            1474.3
+            2498.73,
+            2527.42
         ],
-        "demand_2": 1224.76,
-        "supply_2": 1545.94,
-        "vol_poc": 1328.77,
-        "date": "2026-11-01"
-    },
-    {
-        "ticker": "SUNPHARMA",
-        "bias": "LONG",
-        "setup": "DEMAND_1_CONFLUENCE",
-        "close": 1777.7,
-        "atr": 36.6,
-        "demand_1": [
-            1719.1,
-            1761.0
-        ],
-        "supply_1": [
-            1865.0,
-            1949.8
-        ],
-        "demand_2": 1627.61,
-        "supply_2": 2046.9,
-        "vol_poc": 1848.63,
-        "date": "2026-11-01"
-    },
-    {
-        "ticker": "VBL",
-        "bias": "LONG",
-        "setup": "DEMAND_1_CONFLUENCE",
-        "close": 392.0,
-        "atr": 13.2,
-        "demand_1": [
-            383.16,
-            388.44
-        ],
-        "supply_1": [
-            405.0,
-            416.6
-        ],
-        "demand_2": 350.16,
-        "supply_2": 438.6,
-        "vol_poc": 435.13,
-        "date": "2026-11-01"
-    },
-    {
-        "ticker": "ADANIPORTS",
-        "bias": "SHORT",
-        "setup": "SUPPLY_1_CONFLUENCE",
-        "close": 1850.0,
-        "atr": 51.12,
-        "demand_1": [
-            1650.0,
-            1797.0
-        ],
-        "supply_1": [
-            1859.7,
-            1891.1
-        ],
-        "demand_2": 1522.2,
-        "supply_2": 2018.9,
-        "vol_poc": 1749.98,
-        "date": "2026-11-01"
-    },
-    {
-        "ticker": "INDIGO",
-        "bias": "LONG",
-        "setup": "DEMAND_1_CONFLUENCE",
-        "close": 4877.6,
-        "atr": 123.79,
-        "demand_1": [
-            4659.2,
-            4845.0
-        ],
-        "supply_1": [
-            5064.0,
-            5370.0
-        ],
-        "demand_2": 4464.4,
-        "supply_2": 5679.47,
-        "vol_poc": 4973.15,
-        "date": "2026-11-01"
-    },
-    {
-        "ticker": "POWERGRID",
-        "bias": "LONG",
-        "setup": "DEMAND_1_CONFLUENCE",
-        "close": 265.0,
-        "atr": 6.18,
-        "demand_1": [
-            244.65,
-            263.0
-        ],
-        "supply_1": [
-            269.9,
-            285.62
-        ],
-        "demand_2": 229.2,
-        "supply_2": 301.07,
-        "vol_poc": 265.69,
-        "date": "2026-11-01"
-    },
-    {
-        "ticker": "INFY",
-        "bias": "SHORT",
-        "setup": "SUPPLY_1_CONFLUENCE",
-        "close": 1185.0,
-        "atr": 41.92,
-        "demand_1": [
-            1107.2,
-            1146.5
-        ],
-        "supply_1": [
-            1187.27,
-            1204.03
-        ],
-        "demand_2": 1038.05,
-        "supply_2": 1308.84,
-        "vol_poc": 1129.86,
-        "date": "2026-11-01"
-    },
-    {
-        "ticker": "HCLTECH",
-        "bias": "LONG",
-        "setup": "DEMAND_1_CONFLUENCE",
-        "close": 1428.1,
-        "atr": 40.36,
-        "demand_1": [
-            1316.28,
-            1405.0
-        ],
-        "supply_1": [
-            1459.43,
-            1475.57
-        ],
-        "demand_2": 1185.15,
-        "supply_2": 1576.48,
-        "vol_poc": 1242.53,
-        "date": "2026-11-01"
-    },
-    {
-        "ticker": "ASIANPAINT",
-        "bias": "LONG",
-        "setup": "DEMAND_1_CONFLUENCE",
-        "close": 2320.0,
-        "atr": 55.68,
-        "demand_1": [
-            2217.1,
-            2311.6
-        ],
-        "supply_1": [
-            2398.4,
-            2475.1
-        ],
-        "demand_2": 2077.89,
-        "supply_2": 2678.7,
-        "vol_poc": 2409.78,
-        "date": "2026-11-01"
-    },
-    {
-        "ticker": "ULTRACEMCO",
-        "bias": "LONG",
-        "setup": "DEMAND_1_CONFLUENCE",
-        "close": 11045.0,
-        "atr": 241.85,
-        "demand_1": [
-            10426.0,
-            10967.0
-        ],
-        "supply_1": [
-            11175.0,
-            11820.0
-        ],
-        "demand_2": 9821.37,
-        "supply_2": 12239.0,
-        "vol_poc": 10856.59,
-        "date": "2026-11-01"
-    },
-    {
-        "ticker": "DRREDDY",
-        "bias": "LONG",
-        "setup": "DEMAND_1_CONFLUENCE",
-        "close": 1352.0,
-        "atr": 29.85,
-        "demand_1": [
-            1320.63,
-            1345.0
-        ],
-        "supply_1": [
-            1381.64,
-            1405.98
-        ],
-        "demand_2": 1222.0,
-        "supply_2": 1480.62,
-        "vol_poc": 1203.03,
-        "date": "2026-11-01"
-    },
-    {
-        "ticker": "SBIN",
-        "bias": "LONG",
-        "setup": "DEMAND_1_CONFLUENCE",
-        "close": 961.85,
-        "atr": 17.68,
-        "demand_1": [
-            937.5,
-            956.8
-        ],
-        "supply_1": [
-            971.9,
-            983.8
-        ],
-        "demand_2": 893.3,
-        "supply_2": 1059.8,
-        "vol_poc": 958.54,
-        "date": "2026-11-01"
-    },
-    {
-        "ticker": "M&M",
-        "bias": "LONG",
-        "setup": "DEMAND_1_CONFLUENCE",
-        "close": 2840.3,
-        "atr": 64.32,
-        "demand_1": [
-            2744.3,
-            2802.4
-        ],
-        "supply_1": [
-            2869.9,
-            3019.9
-        ],
-        "demand_2": 2583.5,
-        "supply_2": 3127.8,
-        "vol_poc": 2833.21,
-        "date": "2026-11-01"
-    },
-    {
-        "ticker": "TATACONSUM",
-        "bias": "LONG",
-        "setup": "DEMAND_1_CONFLUENCE",
-        "close": 1025.9,
-        "atr": 25.98,
-        "demand_1": [
-            986.0,
-            1021.0
-        ],
-        "supply_1": [
-            1063.5,
-            1123.4
-        ],
-        "demand_2": 945.0,
-        "supply_2": 1188.36,
-        "vol_poc": 962.03,
+        "demand_2": 1952.1,
+        "supply_2": 2706.71,
+        "vol_poc": 1856.86,
         "date": "2026-11-01"
     }
 ]
