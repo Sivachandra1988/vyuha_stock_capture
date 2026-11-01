@@ -98,21 +98,32 @@ python3 breakout_scanner.py
 
 ## 4. Launching the Web Dashboard
 
-The project includes an interactive web dashboard with real-time charts, watchlist management, and active P&L tracking.
+The project includes an interactive web dashboard with real-time charts, watchlist management, and active P&L tracking, integrated with the continuous scanner engine.
 
-### Default Launch (Port 8080):
+### Quick Launch Scripts:
+* **On Windows (Double-click or run from CMD):**
+  ```cmd
+  # Interactive prompt (defaults to 8080):
+  start_dashboard.bat
+
+  # Direct custom port:
+  start_dashboard.bat 9000
+  ```
+* **On Mobile / Linux / Termux:**
+  ```bash
+  # Make executable (first time only):
+  chmod +x start_dashboard.sh
+
+  # Default (Port 8080):
+  ./start_dashboard.sh
+
+  # Custom port (e.g. 9000):
+  ./start_dashboard.sh 9000
+  ```
+
+### Manual Command:
 ```bash
-python3 src/dashboard/server.py
-```
-
-### Custom IP and Port:
-You can specify any custom host and port using command-line arguments:
-```bash
-# Run on custom port 9000
-python3 src/dashboard/server.py --port 9000
-
-# Run on custom host and port without auto-launching local browser
-python3 src/dashboard/server.py --host 0.0.0.0 --port 5000 --no-browser
+python3 src/dashboard/server.py --port 8080 --host 0.0.0.0
 ```
 
 ### Banner Output:
@@ -201,3 +212,4 @@ Termux provides an extra key bar directly above your on-screen keyboard:
 | **`Volume Down` + `c`** | Hardware shortcut for `Ctrl + C` |
 | **Swipe from Left Edge** | Open Termux session drawer to create **New Session** or switch windows |
 | **`killall -9 python python3`** | Emergency kill all Python processes |
+
