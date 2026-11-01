@@ -154,3 +154,4 @@ python3 breakout_scanner.py
 
 ## 🛡️ License
 Private / Proprietary. For personal and algorithmic trading automation.
+
