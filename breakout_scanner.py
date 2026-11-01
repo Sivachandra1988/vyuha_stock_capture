@@ -27,7 +27,15 @@ import db_storage
 
 # Telegram credentials (reads from environment variables with fallback)
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "7714086057:AAHOadi3WMgKxl3Pbd3BO5zTANRPCEo5YJs")
-STOCK_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "-1002361730006")
+# Vyuha Daily / Swing stocks group (-5132723378)
+VYUHA_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "-5132723378")
+
+DISCLAIMER_TAG = "NOT SEBI registered"
+STANDARD_FOOTER = (
+    "\n━━━━━━━━━━━━━━━━━━\n"
+    "🛑 *Stop-Loss Advisory:* Always maintain a generic Stop-Loss (e.g. 1.5x ATR buffer below Demand zone or max 1.5% - 2.0% capital risk per trade). Never hold any open trade without an active SL order.\n\n"
+    "⚠️ *Disclaimer:* We are NOT SEBI registered. All ideas, levels, and setups shared here are strictly for educational and paper-trading purposes only. Please consult your financial advisor before taking any real trades."
+)
 
 # Files pathing
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -54,16 +62,23 @@ alerted_today = set()
 eod_scanned_today = ""
 current_date = datetime.now().strftime("%Y-%m-%d")
 
-def send_telegram(message):
-    """Sends a markdown message to the configured Telegram channel."""
+def send_telegram(message, chat_id=None):
+    """Sends a markdown message with mandatory SEBI disclaimer & generic SL rule to the Telegram group."""
+    target_chat = chat_id if chat_id else VYUHA_CHAT_ID
+
+    if DISCLAIMER_TAG not in message:
+        message = message.rstrip() + STANDARD_FOOTER
+
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {
-        "chat_id": STOCK_CHAT_ID,
+        "chat_id": target_chat,
         "text": message,
         "parse_mode": "Markdown"
     }
     try:
-        requests.post(url, json=payload, timeout=10)
+        r = requests.post(url, json=payload, timeout=10)
+        if not r.ok:
+            print(f"[WARN] Telegram error ({target_chat}): {r.status_code} {r.text}")
     except Exception as e:
         print(f"Telegram error: {e}")
 

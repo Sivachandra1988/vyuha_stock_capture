@@ -1,24 +1,5 @@
 [
     {
-        "ticker": "GRASIM",
-        "bias": "LONG",
-        "setup": "DEMAND_1_CONFLUENCE",
-        "close": 2981.4,
-        "atr": 63.65,
-        "demand_1": [
-            2828.2,
-            2932.8
-        ],
-        "supply_1": [
-            3185.18,
-            3371.0
-        ],
-        "demand_2": 2669.07,
-        "supply_2": 3530.13,
-        "vol_poc": 3287.23,
-        "date": "2026-11-01"
-    },
-    {
         "ticker": "LAURUSLABS",
         "bias": "LONG",
         "setup": "RUNAWAY_MOMENTUM_BREAKOUT",
@@ -35,6 +16,25 @@
         "demand_2": 1952.1,
         "supply_2": 2706.71,
         "vol_poc": 1856.86,
+        "date": "2026-11-01"
+    },
+    {
+        "ticker": "GRASIM",
+        "bias": "LONG",
+        "setup": "DEMAND_1_CONFLUENCE",
+        "close": 2981.4,
+        "atr": 63.65,
+        "demand_1": [
+            2828.2,
+            2932.8
+        ],
+        "supply_1": [
+            3185.18,
+            3371.0
+        ],
+        "demand_2": 2669.07,
+        "supply_2": 3530.13,
+        "vol_poc": 3287.23,
         "date": "2026-11-01"
     }
 ]

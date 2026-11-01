@@ -578,20 +578,29 @@ def run_vyuha_daily_scan(send_telegram_fn=None, custom_tickers=None):
     print("=" * 78 + "\n")
 
     if send_telegram_fn and watchlist_candidates:
-        top_longs = [c for c in watchlist_candidates if c['bias'] == 'LONG'][:4]
-        top_shorts = [c for c in watchlist_candidates if c['bias'] == 'SHORT'][:4]
+        top_longs = [c for c in watchlist_candidates if c['bias'] == 'LONG'][:5]
+        top_shorts = [c for c in watchlist_candidates if c['bias'] == 'SHORT'][:5]
 
-        msg = "🏛️ *UMX VYUHA — DAILY INSTITUTIONAL WATCHLIST*\n"
-        msg += f"📅 Date: `{datetime.now().strftime('%Y-%m-%d')}`\n\n"
+        msg = "🏛️ *UMX VYUHA — DAILY/SWING INSTITUTIONAL WATCHLIST*\n"
+        msg += f"📅 Date: `{datetime.now().strftime('%Y-%m-%d')}`\n"
+        msg += "━━━━━━━━━━━━━━━━━━\n\n"
         if top_longs:
-            msg += "🟢 *BULLISH ACTION ZONES (Demand 1 / Retrace)*:\n"
+            msg += "🟢 *BULLISH ACTION CANDIDATES (Demand / Retrace)*:\n"
             for c in top_longs:
-                msg += f"• *{c['ticker']}* @ `{c['close']}` | Demand: `{c['demand_1'][0]}-{c['demand_1'][1]}` | POC: `{c['vol_poc']}`\n"
+                poc_s = f"`{c['vol_poc']}`" if c.get('vol_poc') else "N/A"
+                msg += f"• *{c['ticker']}* @ `{c['close']}` | Setup: `{c['setup']}`\n"
+                msg += f"  Demand Zone: `[{c['demand_1'][0]} - {c['demand_1'][1]}]` | Volume POC: {poc_s}\n"
             msg += "\n"
         if top_shorts:
-            msg += "🔴 *BEARISH ACTION ZONES (Supply 1 / Retrace)*:\n"
+            msg += "🔴 *BEARISH ACTION CANDIDATES (Supply / Retrace)*:\n"
             for c in top_shorts:
-                msg += f"• *{c['ticker']}* @ `{c['close']}` | Supply: `{c['supply_1'][0]}-{c['supply_1'][1]}` | POC: `{c['vol_poc']}`\n"
+                poc_s = f"`{c['vol_poc']}`" if c.get('vol_poc') else "N/A"
+                msg += f"• *{c['ticker']}* @ `{c['close']}` | Setup: `{c['setup']}`\n"
+                msg += f"  Supply Zone: `[{c['supply_1'][0]} - {c['supply_1'][1]}]` | Volume POC: {poc_s}\n"
+            msg += "\n"
+        msg += "━━━━━━━━━━━━━━━━━━\n"
+        msg += "🛑 *Stop-Loss Advisory:* Always maintain a generic Stop-Loss (e.g. 1.5x ATR buffer below Demand zone or max 1.5% - 2.0% capital risk per trade). Never hold without a strict SL.\n\n"
+        msg += "⚠️ *Disclaimer:* We are NOT SEBI registered. All ideas, levels, and setups shared here are strictly for educational and paper-trading purposes only. Please consult your financial advisor before taking any real trades."
 
         send_telegram_fn(msg)
 
