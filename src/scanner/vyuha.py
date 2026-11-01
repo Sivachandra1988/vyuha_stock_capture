@@ -581,23 +581,54 @@ def run_vyuha_daily_scan(send_telegram_fn=None, custom_tickers=None):
         top_longs = [c for c in watchlist_candidates if c['bias'] == 'LONG'][:5]
         top_shorts = [c for c in watchlist_candidates if c['bias'] == 'SHORT'][:5]
 
-        msg = "🏛️ *UMX VYUHA — DAILY/SWING INSTITUTIONAL WATCHLIST*\n"
+        msg = "🏛️ *UMX VYUHA — DAILY/SWING RECOMMENDATIONS*\n"
         msg += f"📅 Date: `{datetime.now().strftime('%Y-%m-%d')}`\n"
         msg += "━━━━━━━━━━━━━━━━━━\n\n"
+
         if top_longs:
-            msg += "🟢 *BULLISH ACTION CANDIDATES (Demand / Retrace)*:\n"
+            msg += "🟢 *BUY RECOMMENDATIONS (Swing):*\n\n"
             for c in top_longs:
-                poc_s = f"`{c['vol_poc']}`" if c.get('vol_poc') else "N/A"
-                msg += f"• *{c['ticker']}* @ `{c['close']}` | Setup: `{c['setup']}`\n"
-                msg += f"  Demand Zone: `[{c['demand_1'][0]} - {c['demand_1'][1]}]` | Volume POC: {poc_s}\n"
-            msg += "\n"
+                entry = c['close']
+                atr = c.get('atr', entry * 0.015)
+                sl = round(min(c['demand_1'][0], entry - 1.5 * atr), 2)
+                risk = round(max(entry - sl, atr), 2)
+                t1 = round(entry + 2.0 * risk, 2)
+                t2 = round(entry + 3.0 * risk, 2)
+
+                reason = "Demand Zone Confluence + Anti-Trap Wick Defense"
+                if c['setup'] == "RUNAWAY_MOMENTUM_BREAKOUT":
+                    reason = "News Volume Surge (>2x SMA) + 20-Day High Breakout"
+                elif c['setup'] == "FLIPPED_DEMAND_TEST":
+                    reason = "Role Reversal Test (Broken Resistance Retested as Support)"
+
+                msg += f"• *BUY: #{c['ticker']}*\n"
+                msg += f"  - *Entry:* `{entry:.2f}`\n"
+                msg += f"  - *Stop-Loss:* `{sl:.2f}` (Generic SL below Demand)\n"
+                msg += f"  - *Target 1 (1:2 R:R):* `{t1:.2f}` | *Target 2:* `{t2:.2f}`\n"
+                msg += f"  - *Reason:* {reason}\n"
+                msg += f"  - *Hold Duration:* 3 to 10 Trading Days\n\n"
+
         if top_shorts:
-            msg += "🔴 *BEARISH ACTION CANDIDATES (Supply / Retrace)*:\n"
+            msg += "🔴 *SELL / SHORT RECOMMENDATIONS (Swing):*\n\n"
             for c in top_shorts:
-                poc_s = f"`{c['vol_poc']}`" if c.get('vol_poc') else "N/A"
-                msg += f"• *{c['ticker']}* @ `{c['close']}` | Setup: `{c['setup']}`\n"
-                msg += f"  Supply Zone: `[{c['supply_1'][0]} - {c['supply_1'][1]}]` | Volume POC: {poc_s}\n"
-            msg += "\n"
+                entry = c['close']
+                atr = c.get('atr', entry * 0.015)
+                sl = round(max(c['supply_1'][1], entry + 1.5 * atr), 2)
+                risk = round(max(sl - entry, atr), 2)
+                t1 = round(entry - 2.0 * risk, 2)
+                t2 = round(entry - 3.0 * risk, 2)
+
+                reason = "Supply Zone Confluence + Overhead Rejection"
+                if c['setup'] == "FLIPPED_SUPPLY_TEST":
+                    reason = "Role Reversal Test (Broken Support Retested as Resistance)"
+
+                msg += f"• *SELL / SHORT: #{c['ticker']}*\n"
+                msg += f"  - *Entry:* `{entry:.2f}`\n"
+                msg += f"  - *Stop-Loss:* `{sl:.2f}` (Generic SL above Supply)\n"
+                msg += f"  - *Target 1 (1:2 R:R):* `{t1:.2f}` | *Target 2:* `{t2:.2f}`\n"
+                msg += f"  - *Reason:* {reason}\n"
+                msg += f"  - *Hold Duration:* 3 to 10 Trading Days\n\n"
+
         msg += "━━━━━━━━━━━━━━━━━━\n"
         msg += "🛑 *Stop-Loss Advisory:* Always maintain a generic Stop-Loss (e.g. 1.5x ATR buffer below Demand zone or max 1.5% - 2.0% capital risk per trade). Never hold without a strict SL.\n\n"
         msg += "⚠️ *Disclaimer:* We are NOT SEBI registered. All ideas, levels, and setups shared here are strictly for educational and paper-trading purposes only. Please consult your financial advisor before taking any real trades."
@@ -699,15 +730,18 @@ def evaluate_intraday_vyuha_setup(ticker, df_intraday, df_daily):
             "poc": round(poc_price, 2) if poc_price else round(entry, 2),
             "setup": "DEMAND_RETRACE_BOUNCE",
             "msg": (
-                f"🚀 *UMX VYUHA INTRADAY BUY: #{ticker}*\n"
+                f"⚡ *INTRADAY BUY: #{ticker}*\n"
                 f"━━━━━━━━━━━━━━━━━━\n"
-                f"🎯 *Zone:* `Demand 1 [{d1['bot']:.1f} - {d1['top']:.1f}]`\n"
-                f"⚡ *Entry:* `{entry:.2f}` (Rejection Wick: `{lower_wick_ratio*100:.0f}%`)\n"
-                f"🛑 *Stop-Loss:* `{sl:.2f}` (Risk: `{risk:.2f}` pts | Buffer: 1.5 ATR)\n"
-                f"🎯 *Target 1 (1:2.2):* `{t1:.2f}`\n"
-                f"🏁 *Target 2 (Supply 1):* `{t2:.2f}`\n"
-                f"💎 *AVWAP Slope:* `{'🟢 Accumulation ▲' if is_green_diamond else '⚪ Neutral'}`\n"
-                f"⚡ *Volume POC:* `{poc_price:.2f}`"
+                f"• *Action:* BUY\n"
+                f"• *Entry Level:* `{entry:.2f}`\n"
+                f"• *Stop-Loss:* `{sl:.2f}` (Risk: `{risk:.2f}` pts | Buffer: 1.5 ATR)\n"
+                f"• *Target 1 (1:2.2 R:R):* `{t1:.2f}`\n"
+                f"• *Target 2:* `{t2:.2f}`\n"
+                f"• *Short Reason:* Demand 1 Retest + {lower_wick_ratio*100:.0f}% Rejection Wick + Green AVWAP Slope\n"
+                f"• *Hold Duration:* 1 to 4 Hours (Intraday — Exit by 3:15 PM)\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"🛑 *Stop-Loss Advisory:* Always maintain a generic Stop-Loss at `{sl:.2f}`. Never hold without a strict SL.\n\n"
+                f"⚠️ *Disclaimer:* We are NOT SEBI registered. Strictly for educational & paper-trading analysis only. Consult your financial advisor before trading real capital."
             )
         }
 
@@ -745,15 +779,18 @@ def evaluate_intraday_vyuha_setup(ticker, df_intraday, df_daily):
             "poc": round(poc_price, 2) if poc_price else round(entry, 2),
             "setup": "SUPPLY_RETRACE_REJECTION",
             "msg": (
-                f"🩸 *UMX VYUHA INTRADAY SHORT: #{ticker}*\n"
+                f"⚡ *INTRADAY SELL / SHORT: #{ticker}*\n"
                 f"━━━━━━━━━━━━━━━━━━\n"
-                f"🎯 *Zone:* `Supply 1 [{s1['bot']:.1f} - {s1['top']:.1f}]`\n"
-                f"⚡ *Entry:* `{entry:.2f}` (Rejection Wick: `{upper_wick_ratio*100:.0f}%`)\n"
-                f"🛑 *Stop-Loss:* `{sl:.2f}` (Risk: `{risk:.2f}` pts | Buffer: 1.5 ATR)\n"
-                f"🎯 *Target 1 (1:2.2):* `{t1:.2f}`\n"
-                f"🏁 *Target 2 (Demand 1):* `{t2:.2f}`\n"
-                f"💎 *AVWAP Slope:* `{'🔴 Distribution ▼' if not is_green_diamond else '⚪ Neutral'}`\n"
-                f"⚡ *Volume POC:* `{poc_price:.2f}`"
+                f"• *Action:* SELL / SHORT\n"
+                f"• *Entry Level:* `{entry:.2f}`\n"
+                f"• *Stop-Loss:* `{sl:.2f}` (Risk: `{risk:.2f}` pts | Buffer: 1.5 ATR)\n"
+                f"• *Target 1 (1:2.2 R:R):* `{t1:.2f}`\n"
+                f"• *Target 2:* `{t2:.2f}`\n"
+                f"• *Short Reason:* Supply 1 Retest + {upper_wick_ratio*100:.0f}% Rejection Wick + Red AVWAP Slope\n"
+                f"• *Hold Duration:* 1 to 4 Hours (Intraday — Exit by 3:15 PM)\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"🛑 *Stop-Loss Advisory:* Always maintain a generic Stop-Loss at `{sl:.2f}`. Never hold without a strict SL.\n\n"
+                f"⚠️ *Disclaimer:* We are NOT SEBI registered. Strictly for educational & paper-trading analysis only. Consult your financial advisor before trading real capital."
             )
         }
 
