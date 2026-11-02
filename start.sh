@@ -21,3 +21,4 @@ fi
 
 # Launch all-in-one integrated server (serves web UI and runs scanner)
 python3 dashboard_server.py --host "$HOST" --port "$PORT" --no-browser
+
