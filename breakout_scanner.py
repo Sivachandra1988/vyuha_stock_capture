@@ -238,10 +238,10 @@ def is_market_open():
             
     return True, "Market Open"
 
-def run_scanner_loop(daemon=False, force=False):
+def run_scanner_loop(continuous=True, daemon=False, force=False):
     try:
         print("===============================================================")
-        mode_str = "CONTINUOUS DAEMON" if daemon else "SINGLE RUN"
+        mode_str = "24/7 DAEMON" if daemon else ("CONTINUOUS (TILL 3:30 PM MARKET CLOSE)" if continuous else "SINGLE RUN")
         print(f" [INFO] MODULAR TRADER PILOT ENGINE ({mode_str})")
         print(f" Checking timings (NR7): {', '.join(CHECK_TIMINGS)}")
         print(f" Checking timings (Swing): {', '.join(SWING_TIMINGS)}")
@@ -253,12 +253,15 @@ def run_scanner_loop(daemon=False, force=False):
         
         open_status, reason = is_market_open()
         if not open_status and not force:
-            print(f"⏸️ [INFO] Market is CLOSED ({reason}). Process released.")
-            print("💡 Tip: To run continuous 24/7 background polling, use: python3 breakout_scanner.py --daemon")
-            print("💡 Tip: To force a test scan right now anyway, use: python3 breakout_scanner.py --force\n")
-            return
+            print(f"⏸️ [INFO] Market is CLOSED ({reason}).")
+            if not daemon:
+                print("💡 Tip: To run continuous execution anyway, pass: python3 breakout_scanner.py --force")
+                print("💡 Tip: To run 24/7 background polling, pass: python3 breakout_scanner.py --daemon\n")
+                return
+            else:
+                print("[INFO] Daemon mode active. Waiting for market open...")
 
-        print(f"[INFO] Engine starting: {'FORCED EXECUTION' if force and not open_status else reason}")
+        print(f"[INFO] Engine active: {'FORCED EXECUTION' if force and not open_status else reason}")
         
         # Auto-populate if watchlist is completely empty
         if not os.path.exists(WATCHLIST_FILE) or os.path.getsize(WATCHLIST_FILE) == 0:
@@ -268,15 +271,25 @@ def run_scanner_loop(daemon=False, force=False):
             
         execute_scan_cycle()
 
-        # If not daemon mode, release process immediately
-        if not daemon:
-            print("[INFO] Scan cycle complete. Process released.\n")
+        # If user explicitly requested a single run, exit now
+        if not continuous and not daemon:
+            print("[INFO] Single scan cycle complete. Process released.\n")
             return
+
+        print(f"\n🟢 [INFO] Continuous live monitoring started @ {datetime.now().strftime('%H:%M:%S')} IST.")
+        print("   Monitoring active trades every 30s | Running 15m & hourly scans till 3:30 PM...\n")
             
         global eod_scanned_today
         while True:
             open_status, reason = is_market_open()
-            if not open_status:
+            if not open_status and not force:
+                now_t = datetime.now().time()
+                # If market just closed past 15:30 IST and not daemon, complete session
+                if now_t >= dt_time(15, 30) and not daemon:
+                    print(f"\n🏁 [INFO] Market closed at {datetime.now().strftime('%H:%M:%S')} IST. Daily trading session completed.")
+                    print("   All intraday trades squared off and swing positions logged.")
+                    break
+                    
                 print(f"[INFO] Market is CLOSED ({reason}). Engine sleeping (5m)...")
                 time.sleep(300)
                 continue
@@ -331,26 +344,31 @@ def run_scanner_loop(daemon=False, force=False):
 if __name__ == "__main__":
     # Command line args to manually run EOD or Swing scan tests
     if len(sys.argv) > 1:
-        if sys.argv[1] == "--test-eod":
+        arg = sys.argv[1].lower()
+        if arg == "--test-eod":
             eod.run_eod_scan(send_telegram, market_trend="NEUTRAL")
             sys.exit(0)
-        elif sys.argv[1] == "--test-swing":
+        elif arg == "--test-swing":
             swing.execute_swing_scan(send_telegram, force_full=True, market_trend="NEUTRAL")
             sys.exit(0)
-        elif sys.argv[1] == "--test-advanced":
+        elif arg == "--test-advanced":
             advanced_trend.execute_advanced_trend_scan(send_telegram, market_trend="NEUTRAL")
             sys.exit(0)
-        elif sys.argv[1] == "--test-vyuha-daily":
+        elif arg == "--test-vyuha-daily":
             vyuha.run_vyuha_daily_scan(send_telegram)
             sys.exit(0)
-        elif sys.argv[1] == "--test-vyuha-intraday":
+        elif arg == "--test-vyuha-intraday":
             vyuha.execute_vyuha_intraday_scan(send_telegram, market_trend="NEUTRAL")
             sys.exit(0)
-        elif sys.argv[1] in ["--daemon", "-d"]:
-            run_scanner_loop(daemon=True)
+        elif arg in ["--once", "--single", "-s"]:
+            run_scanner_loop(continuous=False, daemon=False)
             sys.exit(0)
-        elif sys.argv[1] in ["--force", "-f"]:
-            run_scanner_loop(daemon=False, force=True)
+        elif arg in ["--daemon", "-d"]:
+            run_scanner_loop(continuous=True, daemon=True)
+            sys.exit(0)
+        elif arg in ["--force", "-f"]:
+            run_scanner_loop(continuous=True, daemon=False, force=True)
             sys.exit(0)
 
-    run_scanner_loop(daemon=False)
+    # Default: Run continuously during live market hours till 3:30 PM close
+    run_scanner_loop(continuous=True, daemon=False)
