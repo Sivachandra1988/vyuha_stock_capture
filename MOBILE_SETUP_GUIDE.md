@@ -44,6 +44,24 @@ proot-distro install ubuntu
 proot-distro login ubuntu
 ```
 
+### Step 2.1.1: Set Indian Standard Time (IST - Asia/Kolkata)
+Inside Ubuntu proot (since proot doesn't use `systemd`, set it via `tzdata` and symlink):
+```bash
+# 1. Install tzdata without interactive prompt
+DEBIAN_FRONTEND=noninteractive apt update && DEBIAN_FRONTEND=noninteractive apt install -y tzdata
+
+# 2. Link Asia/Kolkata to /etc/localtime
+ln -sf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime
+echo "Asia/Kolkata" > /etc/timezone
+
+# 3. Add TZ variable to bash profile so every session uses IST
+echo 'export TZ="Asia/Kolkata"' >> ~/.bashrc
+source ~/.bashrc
+
+# 4. Verify time (should show IST)
+date
+```
+
 ### Step 2.2: Install Python & Clone Repository
 Inside Ubuntu:
 ```bash
