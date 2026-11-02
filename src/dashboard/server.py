@@ -20,12 +20,13 @@ warnings.simplefilter(action='ignore', category=DeprecationWarning)
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import yfinance as yf
 import pandas as pd
 import csv
+import time
 
 # Add src/ to sys.path so we can import connectors correctly
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -125,83 +126,245 @@ def get_brand_icon():
         return FileResponse(fallback, media_type="image/jpeg")
     return {"error": "Brand icon not found"}
 
-@app.get("/api/trades")
-def get_trades():
-    """Loads paper trades and updates them with live LTP, projections, Nifty indices, and watchlist."""
-    trades = db_storage.get_paper_trades()
-    
-    # Read watchlist
-    watchlist = db_storage.get_watchlist()
+# Quote cache: {ticker: {"last_price": float, "high": float, "low": float, "timestamp": float}}
+_QUOTE_CACHE = {}
+_QUOTE_CACHE_TTL = 8.0  # seconds
 
-    # Fetch Nifty index data
-    nifty_ltp = 0.0
-    nifty_change_pct = 0.0
+# Nifty LTP & 24h change cache
+_NIFTY_CACHE = {
+    "timestamp": 0.0,
+    "ltp": 0.0,
+    "change_pct": 0.0,
+    "trend_up": True
+}
+_NIFTY_CACHE_TTL = 20.0  # seconds
+
+# Nifty 1-month ML Trend Projection cache (expensive - avoid frequent yfinance downloads)
+_NIFTY_PROJECTION_CACHE = {
+    "timestamp": 0.0,
+    "projection": "PROJ_NONE_0.0"
+}
+_NIFTY_PROJ_CACHE_TTL = 120.0  # seconds (2 minutes)
+
+# Market Regime cache (6mo Nifty ADX/SMA alignment - expensive)
+_MARKET_REGIME_CACHE = {
+    "timestamp": 0.0,
+    "regime": "BULLISH"
+}
+_MARKET_REGIME_CACHE_TTL = 300.0  # seconds (5 minutes)
+
+
+def get_cached_market_regime() -> str:
+    """Caches 6-month regime evaluation to avoid yfinance rate limits."""
+    global _MARKET_REGIME_CACHE
+    now = time.time()
+    if (now - _MARKET_REGIME_CACHE["timestamp"] > _MARKET_REGIME_CACHE_TTL) or not _MARKET_REGIME_CACHE["regime"]:
+        try:
+            regime = core.get_market_regime()
+            if regime:
+                _MARKET_REGIME_CACHE = {"timestamp": now, "regime": regime}
+        except Exception as e:
+            print(f"[get_cached_market_regime] Error: {e}")
+    return _MARKET_REGIME_CACHE["regime"]
+
+
+def get_cached_nifty() -> dict:
+    """Returns cached Nifty index data, refreshing LTP every 20s and ML projection every 2m."""
+    global _NIFTY_CACHE, _NIFTY_PROJECTION_CACHE
+    now = time.time()
+
+    # Refresh 1mo ML trend projection if TTL expired
+    if now - _NIFTY_PROJECTION_CACHE["timestamp"] > _NIFTY_PROJ_CACHE_TTL:
+        try:
+            nifty_df = yf.download("^NSEI", period="1mo", progress=False, auto_adjust=True)
+            if not nifty_df.empty:
+                if isinstance(nifty_df.columns, pd.MultiIndex):
+                    nifty_df.columns = nifty_df.columns.get_level_values(0)
+                proj = core.predict_future_trend(nifty_df)
+                _NIFTY_PROJECTION_CACHE = {"timestamp": now, "projection": proj}
+                # Also if Nifty LTP cache is still 0, seed it from 1mo data
+                if _NIFTY_CACHE["ltp"] == 0.0:
+                    last_c = float(nifty_df.iloc[-1]["Close"])
+                    prev_c = float(nifty_df.iloc[-2]["Close"]) if len(nifty_df) > 1 else last_c
+                    chg = ((last_c - prev_c) / prev_c) * 100 if prev_c > 0 else 0.0
+                    _NIFTY_CACHE = {
+                        "timestamp": now,
+                        "ltp": last_c,
+                        "change_pct": chg,
+                        "trend_up": chg >= 0
+                    }
+        except Exception as e:
+            print(f"[get_cached_nifty] Projection fetch error: {e}")
+
+    # Refresh LTP & change_pct if TTL expired
+    if now - _NIFTY_CACHE["timestamp"] > _NIFTY_CACHE_TTL or _NIFTY_CACHE["ltp"] == 0.0:
+        fetched_live = False
+        if angelone.is_authenticated:
+            try:
+                nifty_res = angelone.smart.getMarketData("OHLC", {"NSE": ["26000"]})
+                if nifty_res.get("status") and "data" in nifty_res:
+                    fetched = nifty_res["data"].get("fetched", [])
+                    if fetched:
+                        item = fetched[0]
+                        n_ltp = float(item["ltp"])
+                        prev_c = float(item["close"])
+                        n_chg = ((n_ltp - prev_c) / prev_c) * 100 if prev_c > 0 else 0.0
+                        _NIFTY_CACHE = {
+                            "timestamp": now,
+                            "ltp": n_ltp,
+                            "change_pct": n_chg,
+                            "trend_up": n_chg >= 0
+                        }
+                        fetched_live = True
+            except Exception as e:
+                print(f"[get_cached_nifty] Angel One quote error: {e}")
+
+        if not fetched_live and (_NIFTY_CACHE["ltp"] == 0.0 or now - _NIFTY_CACHE["timestamp"] > _NIFTY_CACHE_TTL):
+            try:
+                nifty_fast = yf.download("^NSEI", period="5d", progress=False, auto_adjust=True)
+                if not nifty_fast.empty:
+                    if isinstance(nifty_fast.columns, pd.MultiIndex):
+                        nifty_fast.columns = nifty_fast.columns.get_level_values(0)
+                    last_c = float(nifty_fast.iloc[-1]["Close"])
+                    prev_c = float(nifty_fast.iloc[-2]["Close"]) if len(nifty_fast) > 1 else last_c
+                    chg = ((last_c - prev_c) / prev_c) * 100 if prev_c > 0 else 0.0
+                    _NIFTY_CACHE = {
+                        "timestamp": now,
+                        "ltp": last_c,
+                        "change_pct": chg,
+                        "trend_up": chg >= 0
+                    }
+            except Exception as e:
+                print(f"[get_cached_nifty] yfinance fallback error: {e}")
+
+    return {
+        "ltp": _NIFTY_CACHE["ltp"],
+        "change_pct": _NIFTY_CACHE["change_pct"],
+        "trend_up": _NIFTY_CACHE["trend_up"],
+        "projection": _NIFTY_PROJECTION_CACHE["projection"]
+    }
+
+
+def fetch_quotes_with_cache(tickers: list) -> dict:
+    """Fetches live quotes for tickers, checking _QUOTE_CACHE first.
+    Only queries exchange / yfinance for items older than _QUOTE_CACHE_TTL.
+    Returns dict: {ticker: {"last_price": float, "high": float, "low": float}}
+    """
+    global _QUOTE_CACHE
+    now = time.time()
+    result = {}
+    needed = []
+
+    for t in tickers:
+        if not t:
+            continue
+        cached = _QUOTE_CACHE.get(t)
+        if cached and (now - cached.get("timestamp", 0) < _QUOTE_CACHE_TTL) and cached.get("last_price", 0.0) > 0:
+            result[t] = cached
+        else:
+            needed.append(t)
+
+    if not needed:
+        return result
+
+    fetched = {}
+    ao_success = False
     if angelone.is_authenticated:
         try:
-            nifty_res = angelone.smart.getMarketData("OHLC", {"NSE": ["26000"]})
-            if nifty_res.get("status") and "data" in nifty_res:
-                fetched = nifty_res["data"].get("fetched", [])
-                if fetched:
-                    item = fetched[0]
-                    nifty_ltp = float(item["ltp"])
-                    prev_close = float(item["close"])
-                    if prev_close > 0:
-                        nifty_change_pct = ((nifty_ltp - prev_close) / prev_close) * 100
+            ao_quotes = angelone.get_live_ohlc(needed)
+            if ao_quotes:
+                ao_success = True
+                for t, q in ao_quotes.items():
+                    lp = float(q.get("last_price", 0.0))
+                    if lp > 0:
+                        fetched[t] = {
+                            "last_price": lp,
+                            "high": float(q.get("high", lp)),
+                            "low": float(q.get("low", lp)),
+                            "timestamp": now
+                        }
         except Exception as e:
-            print(f"Error fetching Nifty live quote: {e}")
-            
-    nifty_projection = "PROJ_NONE_0.0"
-    try:
-        # Download 1-month data to allow core.predict_future_trend to run
-        nifty_df = yf.download("^NSEI", period="1mo", progress=False, auto_adjust=True)
-        if not nifty_df.empty:
-            if isinstance(nifty_df.columns, pd.MultiIndex):
-                nifty_df.columns = nifty_df.columns.get_level_values(0)
-            
-            nifty_projection = core.predict_future_trend(nifty_df)
-            
-            if nifty_ltp == 0.0:
-                nifty_ltp = float(nifty_df.iloc[-1]["Close"])
-                prev_close = float(nifty_df.iloc[-2]["Close"]) if len(nifty_df) > 1 else nifty_ltp
-                if prev_close > 0:
-                    nifty_change_pct = ((nifty_ltp - prev_close) / prev_close) * 100
-    except Exception as e:
-        print(f"Nifty fallback fetch error: {e}")
+            print(f"[AngelOne] get_live_ohlc error: {e}")
 
-    # Filter active and pending tickers
-    active_or_pending = [t for t in trades if t["status"] in ["PENDING", "ACTIVE", "PARTIAL_EXIT"]]
-    trade_tickers = [t["ticker"] for t in active_or_pending]
-    
+    if not ao_success and needed:
+        yf_prices = bulk_yfinance_prices(needed)
+        for t, price in yf_prices.items():
+            if price > 0:
+                fetched[t] = {
+                    "last_price": price,
+                    "high": price,
+                    "low": price,
+                    "timestamp": now
+                }
+
+    for t, q in fetched.items():
+        _QUOTE_CACHE[t] = q
+        result[t] = q
+
+    # Final per-ticker fallback if still missing
+    for t in needed:
+        if t not in result:
+            if t in _QUOTE_CACHE and _QUOTE_CACHE[t].get("last_price", 0.0) > 0:
+                result[t] = _QUOTE_CACHE[t]
+            else:
+                fb = get_fallback_price(t)
+                q_val = {"last_price": fb, "high": fb, "low": fb, "timestamp": now}
+                if fb > 0:
+                    _QUOTE_CACHE[t] = q_val
+                result[t] = q_val
+
+    return result
+
+
+@app.get("/api/trades")
+def get_trades(view: str = Query("auto")):
+    """Loads paper trades and updates them with live LTP, projections, Nifty indices, and watchlist.
+    Only queries live quotes for the tickers currently active on the user's screen (view) to minimize
+    API load, avoid rate-limiting, and conserve mobile battery/data.
+    """
+    trades = db_storage.get_paper_trades()
+    watchlist = db_storage.get_watchlist()
+
+    # Nifty data and market regime from cache
+    nifty_info = get_cached_nifty()
+    nifty_ltp = nifty_info["ltp"]
+    nifty_change_pct = nifty_info["change_pct"]
+    nifty_projection = nifty_info["projection"]
+    trend_up = nifty_info["trend_up"]
+    regime = get_cached_market_regime()
+
+    # Extract trade tickers
+    active_or_pending = [t for t in trades if t.get("status") in ["PENDING", "ACTIVE", "PARTIAL_EXIT"]]
+    trade_tickers = list(set([t["ticker"] for t in active_or_pending if t.get("ticker")]))
+
     # Extract watchlist tickers
     watchlist_tickers = []
     for wl_item in watchlist:
         parts = wl_item.split('|')
-        if len(parts) > 0:
+        if len(parts) > 0 and parts[0].strip():
             watchlist_tickers.append(parts[0].strip())
-            
-    tickers = list(set(trade_tickers + watchlist_tickers))
-    
-    # Fetch live quotes — try Angel One first, bulk yfinance fallback otherwise
-    live_quotes = {}
-    ao_success = False
-    if angelone.is_authenticated and tickers:
-        try:
-            live_quotes = angelone.get_live_ohlc(tickers)
-            ao_success = bool(live_quotes)
-        except Exception as e:
-            print(f"[AngelOne] get_live_ohlc error: {e}")
+    watchlist_tickers = list(set(watchlist_tickers))
 
-    if not ao_success and tickers:
-        print(f"[INFO] Angel One offline/unauthenticated — using yfinance bulk fallback for {tickers}")
-        yf_prices = bulk_yfinance_prices(tickers)
-        for ticker, price in yf_prices.items():
-            live_quotes[ticker] = {"last_price": price, "high": price, "low": price}
+    # Determine tickers to query based on view
+    view_lower = (view or "auto").lower()
+    if view_lower in ["positions", "active"]:
+        tickers_to_query = [t["ticker"] for t in trades if t.get("status") in ["ACTIVE", "PARTIAL_EXIT"] and t.get("ticker")]
+    elif view_lower == "pending":
+        tickers_to_query = [t["ticker"] for t in trades if t.get("status") == "PENDING" and t.get("ticker")]
+    elif view_lower == "watchlist":
+        tickers_to_query = watchlist_tickers
+    else:
+        # "all" or "auto"
+        tickers_to_query = list(set(trade_tickers + watchlist_tickers))
+
+    # Fetch live quotes for only the active view (cached if under TTL)
+    live_quotes = fetch_quotes_with_cache(tickers_to_query)
 
     # Compile live trades list
     updated_trades = []
     total_realized_pnl = 0.0
     total_unrealized_pnl = 0.0
-    
+
     # Load closed trades PnL from log
     try:
         pnl_logs = db_storage.get_pnl_log()
@@ -214,27 +377,27 @@ def get_trades():
         print(f"Error loading PnL log: {e}")
 
     for trade in trades:
-        ticker = trade["ticker"]
-        status = trade["status"]
-        direction = trade["direction"]
-        entry = float(trade["entry_price"])
-        qty = int(trade["quantity"])
-        t1 = float(trade["target1"])
-        t2 = float(trade["target2"])
-        sl = float(trade["initial_sl"])
-        
+        ticker = trade.get("ticker", "")
+        status = trade.get("status", "")
+        direction = trade.get("direction", "BUY")
+        entry = float(trade.get("entry_price", 0.0))
+        qty = int(trade.get("quantity", 1))
+        t1 = float(trade.get("target1", 0.0))
+        t2 = float(trade.get("target2", 0.0))
+        sl = float(trade.get("initial_sl", 0.0))
+
         ltp = 0.0
         high = 0.0
         low = 0.0
-        
+
         # Calculate Projected Profit & Loss
         risk_per_share = abs(entry - sl)
         projected_loss = risk_per_share * qty
         projected_profit = abs(t1 - entry) * (qty / 2) + abs(t2 - entry) * (qty / 2)
-        
+
         trade["projected_loss"] = projected_loss
         trade["projected_profit"] = projected_profit
-        
+
         # Calculate Duration
         from datetime import datetime
         date_to_use = trade.get("entry_date") or trade.get("setup_date")
@@ -251,24 +414,24 @@ def get_trades():
             except Exception:
                 pass
         trade["duration"] = duration
-        
+
         # Attach live price
         if status in ["PENDING", "ACTIVE", "PARTIAL_EXIT"]:
-            # Use live_quotes if available, else yfinance single-ticker fallback
-            if ticker in live_quotes:
-                quote = live_quotes[ticker]
+            # Check live_quotes first, then cached quote in _QUOTE_CACHE, else entry
+            quote = live_quotes.get(ticker) or _QUOTE_CACHE.get(ticker)
+            if quote:
                 ltp = quote["last_price"]
                 high = quote.get("high", ltp)
                 low = quote.get("low", ltp)
             else:
-                ltp = get_fallback_price(ticker)
-                high = ltp
-                low = ltp
-                
+                ltp = entry
+                high = entry
+                low = entry
+
             trade["ltp"] = ltp
             trade["high"] = high
             trade["low"] = low
-            
+
             # Calculate Unrealized PnL
             unrealized_pnl = 0.0
             if status == "ACTIVE":
@@ -284,15 +447,15 @@ def get_trades():
                     realized_half = (entry - t1) * (qty / 2)
                     unrealized_half = (entry - ltp) * (qty / 2)
                 unrealized_pnl = realized_half + unrealized_half
-                
+
             trade["pnl"] = unrealized_pnl
             total_unrealized_pnl += unrealized_pnl
         else:
             trade["ltp"] = trade.get("exit_price", entry)
             trade["pnl"] = trade.get("pnl", 0.0)
-            
+
         updated_trades.append(trade)
-        
+
     # Attach LTP to watchlist items
     watchlist_objects = []
     for wl_item in watchlist:
@@ -304,19 +467,17 @@ def get_trades():
             trade_type = parts[3].strip() if len(parts) > 3 else "POSITIONAL"
             entry_price_str = parts[4].strip() if len(parts) > 4 else ""
             proj_str = parts[5].strip() if len(parts) > 5 else "PROJ_NONE_0.0"
-            
+
             entry_price_val = None
             if entry_price_str:
                 try:
                     entry_price_val = float(entry_price_str)
                 except ValueError:
                     pass
-            
-            wl_ltp = 0.0
-            if ticker in live_quotes:
-                wl_ltp = live_quotes[ticker]["last_price"]
-            # No extra call — bulk_yfinance_prices already covered watchlist tickers above
-                
+
+            quote = live_quotes.get(ticker) or _QUOTE_CACHE.get(ticker)
+            wl_ltp = quote["last_price"] if quote else (entry_price_val or 0.0)
+
             watchlist_objects.append({
                 "ticker": ticker,
                 "strategy": strategy,
@@ -326,23 +487,23 @@ def get_trades():
                 "entry_price": entry_price_val,
                 "projection": proj_str
             })
-        
+
     return {
         "trades": updated_trades,
         "watchlist": watchlist_objects,
         "nifty": {
             "ltp": nifty_ltp,
             "change_pct": nifty_change_pct,
-            "trend_up": nifty_change_pct >= 0,
-            "regime": core.get_market_regime(),
+            "trend_up": trend_up,
+            "regime": regime,
             "projection": nifty_projection
         },
         "summary": {
             "realized_pnl": total_realized_pnl,
             "unrealized_pnl": total_unrealized_pnl,
             "total_pnl": total_realized_pnl + total_unrealized_pnl,
-            "active_count": len([t for t in trades if t["status"] in ["ACTIVE", "PARTIAL_EXIT"]]),
-            "pending_count": len([t for t in trades if t["status"] == "PENDING"]),
+            "active_count": len([t for t in trades if t.get("status") in ["ACTIVE", "PARTIAL_EXIT"]]),
+            "pending_count": len([t for t in trades if t.get("status") == "PENDING"]),
             "online": angelone.is_authenticated
         }
     }

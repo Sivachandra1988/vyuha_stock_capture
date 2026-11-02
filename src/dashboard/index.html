@@ -1278,7 +1278,25 @@
             renderWatchlist();
         }
 
+        let activeMobileTab = 'positions';
+
+        function getActiveView() {
+            const wlModal = document.getElementById('watchlist-overlay');
+            if (wlModal && wlModal.classList.contains('open')) {
+                return 'watchlist';
+            }
+            if (window.innerWidth <= 768) {
+                return activeMobileTab;
+            }
+            const content = document.getElementById('watchlist-content');
+            if (content && content.style.display === 'none') {
+                return 'positions';
+            }
+            return 'all';
+        }
+
         function switchMobileTab(tabName, evt) {
+            activeMobileTab = tabName;
             // Update buttons
             const btns = document.querySelectorAll('.mobile-tab-btn');
             btns.forEach(btn => btn.classList.remove('active'));
@@ -1305,6 +1323,9 @@
                 if (sidebar) sidebar.classList.add('active-mobile-tab');
                 if (secPend) secPend.classList.add('active-mobile-tab');
             }
+
+            // Immediately query the active view
+            fetchTrades(tabName);
         }
 
         function toggleWatchlist() {
@@ -1313,6 +1334,7 @@
             if (content.style.display === 'none') {
                 content.style.display = 'block';
                 icon.innerText = '▼';
+                fetchTrades(getActiveView());
             } else {
                 content.style.display = 'none';
                 icon.innerText = '▶';
@@ -1322,9 +1344,11 @@
         function openWatchlistModal() {
             document.getElementById('watchlist-overlay').classList.add('open');
             renderWatchlist();
+            fetchTrades('watchlist');
         }
         function closeWatchlistModal() {
             document.getElementById('watchlist-overlay').classList.remove('open');
+            fetchTrades(getActiveView());
         }
 
         function showWatchlistTab(tab) {
@@ -1650,14 +1674,22 @@
             if (modalContainer) modalContainer.innerHTML = htmlContent;
         }
 
-        async function fetchTrades() {
+        let isFetchingTrades = false;
+
+        async function fetchTrades(view) {
+            if (isFetchingTrades) return;
+            if (document.hidden) return; // Do not poll when screen is turned off or tab is hidden
+            const currentView = view || getActiveView();
+            isFetchingTrades = true;
             try {
-                const response = await fetch('/api/trades');
+                const response = await fetch(`/api/trades?view=${encodeURIComponent(currentView)}`);
                 if (!response.ok) return; // fail silently
                 const data = await response.json();
                 updateUI(data);
             } catch (error) {
                 // Suppress network errors from polluting console (e.g. during backend restart)
+            } finally {
+                isFetchingTrades = false;
             }
         }
 
@@ -1880,10 +1912,39 @@
             }).join('');
         }
 
-        // Fetch immediately and poll every 3 seconds
-        showWatchlistTab(currentTab); // Highlight the initial tab properly on screen load
-        fetchTrades();
-        setInterval(fetchTrades, 3000);
+        let tradesPollTimer = null;
+
+        function startPolling() {
+            if (tradesPollTimer) clearInterval(tradesPollTimer);
+            // Polling every 5 seconds for only on-screen active tickers
+            tradesPollTimer = setInterval(() => {
+                if (!document.hidden) {
+                    fetchTrades(getActiveView());
+                }
+            }, 5000);
+        }
+
+        function stopPolling() {
+            if (tradesPollTimer) {
+                clearInterval(tradesPollTimer);
+                tradesPollTimer = null;
+            }
+        }
+
+        // Pause polling when screen is locked or tab is hidden; resume immediately on wake
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopPolling();
+            } else {
+                fetchTrades(getActiveView());
+                startPolling();
+            }
+        });
+
+        // Initialize view and start on-screen ticker polling
+        showWatchlistTab(currentTab);
+        fetchTrades(getActiveView());
+        startPolling();
     </script>
 
     <!-- Trade History Footer Ribbon -->
