@@ -476,9 +476,9 @@ def run_eod_scan(send_telegram_fn, market_trend="NEUTRAL"):
             })
                 
         if new_additions:
-            msg = (f"[INFO] Trader Pilot Velocity Engine\n"
-                   f"Successfully scanned F&O universe. Highest calculated movement candidates for tomorrow:\n"
-                   + "\n".join([f"- {item}" for item in new_additions]))
+            msg = (f"🏛️ *VYUHA DAILY WATCHLIST* ({len(new_additions)} Setups)\n"
+                   f"Highest calculated movement candidates for tomorrow:\n\n"
+                   + "\n".join([f"• {item}" for item in new_additions]))
             send_telegram_fn(msg)
             print(f"[EOD Scan] Identified high movement tickers: {', '.join(new_additions)}")
         else:

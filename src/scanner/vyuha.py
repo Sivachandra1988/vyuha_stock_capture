@@ -595,18 +595,15 @@ def run_vyuha_daily_scan(send_telegram_fn=None, custom_tickers=None):
                 t1 = round(entry + 2.0 * risk, 2)
                 t2 = round(entry + 3.0 * risk, 2)
 
-                reason = "Demand Zone Confluence + Anti-Trap Wick Defense"
+                reason = "Demand Confluence + Anti-Trap Defense"
                 if c['setup'] == "RUNAWAY_MOMENTUM_BREAKOUT":
-                    reason = "News Volume Surge (>2x SMA) + 20-Day High Breakout"
+                    reason = "News Volume Surge (>2x SMA) + 20D High B/O"
                 elif c['setup'] == "FLIPPED_DEMAND_TEST":
-                    reason = "Role Reversal Test (Broken Resistance Retested as Support)"
+                    reason = "Role Reversal (Resistance Retested as Support)"
 
                 msg += f"• *BUY: #{c['ticker']}*\n"
-                msg += f"  - *Entry:* `{entry:.2f}`\n"
-                msg += f"  - *Stop-Loss:* `{sl:.2f}` (Generic SL below Demand)\n"
-                msg += f"  - *Target 1 (1:2 R:R):* `{t1:.2f}` | *Target 2:* `{t2:.2f}`\n"
-                msg += f"  - *Reason:* {reason}\n"
-                msg += f"  - *Hold Duration:* 3 to 10 Trading Days\n\n"
+                msg += f"  Entry: `{entry:.2f}` | SL: `{sl:.2f}` | T1: `{t1:.2f}` | T2: `{t2:.2f}`\n"
+                msg += f"  Reason: {reason} | Hold: 3–10 Days\n\n"
 
         if top_shorts:
             msg += "🔴 *SELL / SHORT RECOMMENDATIONS (Swing):*\n\n"
@@ -618,20 +615,15 @@ def run_vyuha_daily_scan(send_telegram_fn=None, custom_tickers=None):
                 t1 = round(entry - 2.0 * risk, 2)
                 t2 = round(entry - 3.0 * risk, 2)
 
-                reason = "Supply Zone Confluence + Overhead Rejection"
+                reason = "Supply Confluence + Overhead Rejection"
                 if c['setup'] == "FLIPPED_SUPPLY_TEST":
-                    reason = "Role Reversal Test (Broken Support Retested as Resistance)"
+                    reason = "Role Reversal (Support Retested as Resistance)"
 
-                msg += f"• *SELL / SHORT: #{c['ticker']}*\n"
-                msg += f"  - *Entry:* `{entry:.2f}`\n"
-                msg += f"  - *Stop-Loss:* `{sl:.2f}` (Generic SL above Supply)\n"
-                msg += f"  - *Target 1 (1:2 R:R):* `{t1:.2f}` | *Target 2:* `{t2:.2f}`\n"
-                msg += f"  - *Reason:* {reason}\n"
-                msg += f"  - *Hold Duration:* 3 to 10 Trading Days\n\n"
+                msg += f"• *SELL: #{c['ticker']}*\n"
+                msg += f"  Entry: `{entry:.2f}` | SL: `{sl:.2f}` | T1: `{t1:.2f}` | T2: `{t2:.2f}`\n"
+                msg += f"  Reason: {reason} | Hold: 3–10 Days\n\n"
 
-        msg += "━━━━━━━━━━━━━━━━━━\n"
-        msg += "🛑 *Stop-Loss Advisory:* Always maintain a generic Stop-Loss (e.g. 1.5x ATR buffer below Demand zone or max 1.5% - 2.0% capital risk per trade). Never hold without a strict SL.\n\n"
-        msg += "⚠️ *Disclaimer:* We are NOT SEBI registered. All ideas, levels, and setups shared here are strictly for educational and paper-trading purposes only. Please consult your financial advisor before taking any real trades."
+        msg += "_⚠️ Not SEBI registered. Strictly educational. Mandatory generic SL (1.5x ATR / max 2% risk)._"
 
         send_telegram_fn(msg)
 
@@ -738,10 +730,8 @@ def evaluate_intraday_vyuha_setup(ticker, df_intraday, df_daily):
                 f"• *Target 1 (1:2.2 R:R):* `{t1:.2f}`\n"
                 f"• *Target 2:* `{t2:.2f}`\n"
                 f"• *Short Reason:* Demand 1 Retest + {lower_wick_ratio*100:.0f}% Rejection Wick + Green AVWAP Slope\n"
-                f"• *Hold Duration:* 1 to 4 Hours (Intraday — Exit by 3:15 PM)\n"
-                f"━━━━━━━━━━━━━━━━━━\n"
-                f"🛑 *Stop-Loss Advisory:* Always maintain a generic Stop-Loss at `{sl:.2f}`. Never hold without a strict SL.\n\n"
-                f"⚠️ *Disclaimer:* We are NOT SEBI registered. Strictly for educational & paper-trading analysis only. Consult your financial advisor before trading real capital."
+                f"• *Hold Duration:* 1 to 4 Hours (Intraday — Exit by 3:15 PM)\n\n"
+                f"_⚠️ Not SEBI registered. Strictly educational. Mandatory generic SL (1.5x ATR / max 2% risk)._"
             )
         }
 
@@ -787,10 +777,8 @@ def evaluate_intraday_vyuha_setup(ticker, df_intraday, df_daily):
                 f"• *Target 1 (1:2.2 R:R):* `{t1:.2f}`\n"
                 f"• *Target 2:* `{t2:.2f}`\n"
                 f"• *Short Reason:* Supply 1 Retest + {upper_wick_ratio*100:.0f}% Rejection Wick + Red AVWAP Slope\n"
-                f"• *Hold Duration:* 1 to 4 Hours (Intraday — Exit by 3:15 PM)\n"
-                f"━━━━━━━━━━━━━━━━━━\n"
-                f"🛑 *Stop-Loss Advisory:* Always maintain a generic Stop-Loss at `{sl:.2f}`. Never hold without a strict SL.\n\n"
-                f"⚠️ *Disclaimer:* We are NOT SEBI registered. Strictly for educational & paper-trading analysis only. Consult your financial advisor before trading real capital."
+                f"• *Hold Duration:* 1 to 4 Hours (Intraday — Exit by 3:15 PM)\n\n"
+                f"_⚠️ Not SEBI registered. Strictly educational. Mandatory generic SL (1.5x ATR / max 2% risk)._"
             )
         }
 
@@ -888,6 +876,7 @@ def execute_vyuha_intraday_scan(send_telegram_fn=None, market_trend="NEUTRAL"):
     pt = trades.load_paper_trades()
     active_tickers = set([t["ticker"] for t in pt if t["status"] in ["ACTIVE", "PARTIAL_EXIT", "PENDING"]])
 
+    new_alerts = []
     for c in candidates:
         ticker = c["ticker"]
         if ticker in active_tickers:
@@ -896,9 +885,22 @@ def execute_vyuha_intraday_scan(send_telegram_fn=None, market_trend="NEUTRAL"):
         alert_key = f"{ticker}_{c['setup']}_{datetime.now().strftime('%Y-%m-%d')}"
         if alert_key not in alerted_vyuha_today:
             alerted_vyuha_today.add(alert_key)
-            save_vyuha_alerts()
+            new_alerts.append(c)
             print(f"[VYUHA ALERT] Fired for {ticker} ({c['direction']})")
-            if send_telegram_fn:
-                send_telegram_fn(c["msg"])
+
+    if new_alerts:
+        save_vyuha_alerts()
+        if send_telegram_fn:
+            lines_out = [f"⚡ *UMX VYUHA INTRADAY SIGNALS* ({len(new_alerts)} Setups)\n"]
+            for c in new_alerts:
+                action = "🟢 BUY" if c["direction"] == "BUY" else "🔴 SELL"
+                setup_title = c['setup'].replace('_', ' ').title()
+                lines_out.append(
+                    f"• *{action}: #{c['ticker']}*\n"
+                    f"  Entry: `{c['entry']:.2f}` | SL: `{c['sl']:.2f}` | T1: `{c['target1']:.2f}` | T2: `{c['target2']:.2f}`\n"
+                    f"  Reason: {setup_title} | Hold: 1–4 Hours"
+                )
+            combined_msg = "\n\n".join(lines_out)
+            send_telegram_fn(combined_msg)
 
     return candidates

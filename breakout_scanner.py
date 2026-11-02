@@ -32,9 +32,7 @@ VYUHA_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "-5132723378")
 
 DISCLAIMER_TAG = "NOT SEBI registered"
 STANDARD_FOOTER = (
-    "\n━━━━━━━━━━━━━━━━━━\n"
-    "🛑 *Stop-Loss Advisory:* Always maintain a generic Stop-Loss (e.g. 1.5x ATR buffer below Demand zone or max 1.5% - 2.0% capital risk per trade). Never hold any open trade without an active SL order.\n\n"
-    "⚠️ *Disclaimer:* We are NOT SEBI registered. All ideas, levels, and setups shared here are strictly for educational and paper-trading purposes only. Please consult your financial advisor before taking any real trades."
+    "\n\n_⚠️ Not SEBI registered. Strictly educational. Mandatory generic SL (1.5x ATR / max 2% risk)._"
 )
 
 # Files pathing
@@ -148,6 +146,7 @@ def execute_scan_cycle():
     pt = trades.load_paper_trades()
     active_tickers = set([t["ticker"] for t in pt if t["status"] in ["ACTIVE", "PARTIAL_EXIT"]])
 
+    triggered_candidates = []
     for ticker in tickers:
         if ticker in active_tickers:
             remove_list.append(ticker)
@@ -171,9 +170,8 @@ def execute_scan_cycle():
             if result.get("trigger"):
                 alert_key = f"{ticker}_{result.get('status')}_{result.get('setup_date')}"
                 if alert_key not in alerted_today:
-                    send_telegram(result["msg"])
+                    triggered_candidates.append((ticker, result, strategy))
                     alerted_today.add(alert_key)
-                    save_alerts_state()
                     result["strategy"] = strategy
                     trades.initiate_paper_trade(ticker, result)
                 # Remove from watchlist since the trade has now been triggered and is active
@@ -185,6 +183,18 @@ def execute_scan_cycle():
             # The stock no longer has a valid NR7 setup in the last 3 days, remove it.
             remove_list.append(ticker)
             print(f"Removing {ticker} from watchlist. Reason: {result.get('status')}")
+
+    if triggered_candidates:
+        save_alerts_state()
+        lines_out = [f"⚡ *VYUHA BREAKOUT TRIGGERS* ({len(triggered_candidates)} Active)\n"]
+        for ticker, res, strat in triggered_candidates:
+            dir_label = "🟢 BUY" if res.get("direction", "BUY").upper() in ["BUY", "LONG"] else "🔴 SELL"
+            lines_out.append(
+                f"• *{dir_label}: #{ticker}*\n"
+                f"  Entry: `{res.get('entry', 0.0):.2f}` | SL: `{res.get('sl', 0.0):.2f}` | T1: `{res.get('target1', 0.0):.2f}`\n"
+                f"  Reason: NR7 Breakout ({strat.upper()}) | Hold: Positional / 1–3 Days"
+            )
+        send_telegram("\n\n".join(lines_out))
 
     # Database auto-purges any trigger exits via remove_from_watchlist above, 
     # but for outdated structures we also purge:

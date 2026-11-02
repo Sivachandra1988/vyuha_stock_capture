@@ -310,6 +310,7 @@ def execute_advanced_trend_scan(send_telegram_fn, market_trend="NEUTRAL"):
     pt = trades.load_paper_trades()
     active_tickers = set([t["ticker"] for t in pt if t["status"] in ["ACTIVE", "PARTIAL_EXIT", "PENDING"]])
     
+    new_alerts = []
     for c in candidates:
         ticker = c["ticker"]
         if ticker in active_tickers:
@@ -317,10 +318,9 @@ def execute_advanced_trend_scan(send_telegram_fn, market_trend="NEUTRAL"):
             
         alert_key = f"{ticker}_{c['status']}_{c['setup_date']}"
         if alert_key not in alerted_today:
-            send_telegram_fn(c["msg"])
-            print(c["msg"])
+            new_alerts.append(c)
             alerted_today.add(alert_key)
-            save_alerts_state()
+            print(c["msg"])
             
             trades.initiate_paper_trade(ticker, {
                 "entry": c["entry"],
@@ -351,5 +351,18 @@ def execute_advanced_trend_scan(send_telegram_fn, market_trend="NEUTRAL"):
                 
             with open(WATCHLIST_FILE, "w") as f:
                 f.writelines(lines)
+
+    if new_alerts:
+        save_alerts_state()
+        lines_out = [f"⚡ *VYUHA INTRADAY TREND SIGNALS* ({len(new_alerts)} Setups)\n"]
+        for c in new_alerts:
+            action = "🟢 BUY" if c["direction"] == "BUY" else "🔴 SELL"
+            lines_out.append(
+                f"• *{action}: #{c['ticker']}*\n"
+                f"  Entry: `{c['entry']:.2f}` | SL: `{c['sl']:.2f}` | T1: `{c['target1']:.2f}` | T2: `{c['target2']:.2f}`\n"
+                f"  Reason: 15m Cloud & Momentum | Hold: 1–4 Hours"
+            )
+        combined_msg = "\n\n".join(lines_out)
+        send_telegram_fn(combined_msg)
 
     print(f"Advanced Trend Scan complete. Generated {len(candidates)} valid signals.")
