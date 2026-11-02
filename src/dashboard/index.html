@@ -287,141 +287,240 @@
             }
         }
 
-        @media (max-width: 600px) {
+        @media (max-width: 768px) {
+            html, body {
+                overflow-x: hidden !important;
+                overflow-y: auto !important;
+                height: auto !important;
+                min-height: 100vh !important;
+                -webkit-overflow-scrolling: touch;
+            }
+
             body {
-                padding: 0.5rem;
+                padding: 0.5rem 0.6rem !important;
+                padding-bottom: 75px !important;
             }
 
             header {
-                flex-direction: row;
-                align-items: center;
-                gap: 0.3rem;
-                padding-bottom: 0.5rem;
-                flex-wrap: wrap;
-                justify-content: space-between;
+                flex-direction: column !important;
+                align-items: stretch !important;
+                gap: 0.5rem !important;
+                padding-bottom: 0.5rem !important;
+            }
+
+            .logo-section {
+                display: flex !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                width: 100% !important;
             }
 
             .brand-logo-img {
-                width: 36px;
-                height: 36px;
+                width: 38px !important;
+                height: 38px !important;
             }
 
             .logo-section h1 {
-                font-size: 1.05rem;
+                font-size: 1.15rem !important;
             }
 
             .logo-section p {
-                font-size: 0.65rem;
+                font-size: 0.65rem !important;
             }
 
             .header-stats {
-                width: auto;
-                flex-grow: 1;
-                justify-content: flex-end;
-                flex-direction: row;
-                align-items: center;
-                gap: 0.3rem;
-            }
-
-            .pnl-summary-bar {
-                flex-direction: row;
-                justify-content: space-between;
-                gap: 0.5rem;
-                padding: 0.6rem 0.8rem;
-            }
-
-            .pnl-divider {
-                width: 1px;
-                height: 25px;
-            }
-
-            .pnl-label {
-                font-size: 0.6rem;
-            }
-
-            .pnl-value {
-                font-size: 0.95rem;
-            }
-
-            .section-header {
-                display: none !important;
+                width: 100% !important;
+                display: flex !important;
+                justify-content: space-between !important;
+                align-items: center !important;
+                gap: 0.5rem !important;
             }
 
             .nifty-widget {
-                flex-grow: 0;
-                padding: 0.2rem 0.5rem;
-                font-size: 0.75rem;
+                flex: 1 !important;
+                padding: 0.35rem 0.6rem !important;
+                font-size: 0.78rem !important;
+                justify-content: space-between !important;
             }
 
             .status-badge {
-                padding: 0.2rem 0.4rem;
+                padding: 0.35rem 0.6rem !important;
             }
 
-            .dashboard-sections {
-                max-height: none;
-                overflow: visible;
+            .pnl-summary-bar {
+                display: flex !important;
+                flex-direction: row !important;
+                justify-content: space-between !important;
+                align-items: center !important;
+                gap: 0.3rem !important;
+                padding: 0.6rem 0.7rem !important;
+                margin-bottom: 0.8rem !important;
             }
 
-            .positions-section,
-            .right-sidebar {
-                display: none;
+            .pnl-item {
+                flex-direction: column !important;
+                align-items: center !important;
+                gap: 0.15rem !important;
+                flex: 1 !important;
+                text-align: center !important;
             }
 
-            .positions-section.active-mobile-tab,
-            .right-sidebar.active-mobile-tab {
-                display: block;
+            .pnl-divider {
+                width: 1px !important;
+                height: 28px !important;
             }
 
-            .right-sidebar {
-                gap: 1rem;
-                display: flex;
-                flex-direction: column;
+            .pnl-label {
+                font-size: 0.62rem !important;
             }
 
-            .queue-section {
-                display: none;
-            }
-
-            .queue-section.active-mobile-tab {
-                display: block;
-            }
-
-            .watchlist-section {
-                display: none;
-            }
-
-            .watchlist-section.active-mobile-tab {
-                display: block;
+            .pnl-value {
+                font-size: 0.95rem !important;
             }
 
             .mobile-tabs {
-                display: flex;
-                gap: 0.5rem;
-                margin-bottom: 1rem;
-                overflow-x: auto;
-                padding-bottom: 0.5rem;
+                display: flex !important;
+                gap: 0.4rem !important;
+                margin-bottom: 0.8rem !important;
+                overflow-x: auto !important;
+                padding-bottom: 0.2rem !important;
+                -webkit-overflow-scrolling: touch;
             }
 
             .mobile-tab-btn {
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid var(--border-color);
-                color: var(--text-secondary);
-                padding: 0.5rem 1rem;
-                border-radius: 20px;
-                white-space: nowrap;
-                font-size: 0.85rem;
-                font-weight: 500;
-                cursor: pointer;
+                flex: 1 !important;
+                text-align: center !important;
+                background: rgba(255, 255, 255, 0.05) !important;
+                border: 1px solid var(--border-color) !important;
+                color: var(--text-secondary) !important;
+                padding: 0.45rem 0.5rem !important;
+                border-radius: 20px !important;
+                white-space: nowrap !important;
+                font-size: 0.82rem !important;
+                font-weight: 500 !important;
+                cursor: pointer !important;
             }
 
             .mobile-tab-btn.active {
-                background: rgba(59, 130, 246, 0.2);
-                border-color: rgba(59, 130, 246, 0.5);
-                color: var(--text-primary);
+                background: rgba(59, 130, 246, 0.25) !important;
+                border-color: rgba(59, 130, 246, 0.6) !important;
+                color: var(--text-primary) !important;
+                font-weight: 600 !important;
+            }
+
+            .dashboard-sections {
+                display: block !important;
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+                margin-bottom: 0 !important;
+            }
+
+            /* Clean Mobile View Switching */
+            .positions-section,
+            .right-sidebar,
+            .queue-section,
+            .watchlist-section {
+                display: none !important;
+            }
+
+            .positions-section.active-mobile-tab {
+                display: flex !important;
+                flex-direction: column !important;
+                width: 100% !important;
+            }
+
+            .right-sidebar.active-mobile-tab {
+                display: flex !important;
+                flex-direction: column !important;
+                width: 100% !important;
+                height: auto !important;
+                gap: 0.8rem !important;
+            }
+
+            .watchlist-section.active-mobile-tab {
+                display: block !important;
+                width: 100% !important;
+            }
+
+            .queue-section.active-mobile-tab {
+                display: flex !important;
+                flex-direction: column !important;
+                width: 100% !important;
+            }
+
+            .trades-grid,
+            .pending-list,
+            .watchlist-grid {
+                max-height: none !important;
+                overflow-y: visible !important;
+                padding-right: 0 !important;
             }
 
             .trade-card {
-                padding: 0.8rem !important;
+                padding: 0.7rem 0.8rem !important;
+                gap: 0.4rem !important;
+            }
+
+            .trade-info {
+                display: flex !important;
+                flex-wrap: wrap !important;
+                align-items: center !important;
+                gap: 0.35rem !important;
+            }
+
+            .ticker-name {
+                font-size: 1rem !important;
+            }
+
+            .direction-badge {
+                font-size: 0.65rem !important;
+                padding: 0.15rem 0.45rem !important;
+            }
+
+            .trade-details {
+                display: grid !important;
+                grid-template-columns: repeat(2, 1fr) !important;
+                gap: 0.4rem 0.6rem !important;
+                padding: 0.5rem !important;
+                background: rgba(255, 255, 255, 0.02) !important;
+                border-radius: 8px !important;
+            }
+
+            .detail-item {
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                gap: 0.1rem !important;
+                width: 100% !important;
+                min-width: 0 !important;
+            }
+
+            .detail-label {
+                font-size: 0.62rem !important;
+                white-space: nowrap !important;
+            }
+
+            .detail-value {
+                font-size: 0.85rem !important;
+                font-weight: 600 !important;
+            }
+
+            .projections-row {
+                display: flex !important;
+                flex-direction: row !important;
+                justify-content: space-between !important;
+                gap: 0.3rem !important;
+                padding: 0.25rem 0.4rem !important;
+                font-size: 0.72rem !important;
+            }
+
+            .progress-bar-container {
+                height: 4px !important;
+                margin-top: 0.15rem !important;
+            }
+
+            .pending-card {
+                padding: 0.6rem 0.7rem !important;
             }
 
             .mobile-badge {
@@ -439,83 +538,38 @@
                 display: none;
             }
 
-            @keyframes blink {
-                0% {
-                    background-color: var(--blue);
-                }
-
-                50% {
-                    background-color: var(--green);
-                    transform: scale(1.2);
-                }
-
-                100% {
-                    background-color: var(--blue);
-                }
+            .history-ribbon {
+                padding-bottom: max(0.4rem, env(safe-area-inset-bottom, 0px)) !important;
             }
 
-            .blink-anim {
-                animation: blink 0.8s ease-in-out 3;
+            .history-modal {
+                max-height: 92vh !important;
+                border-radius: 16px 16px 0 0 !important;
             }
 
-            .ticker-name {
-                font-size: 0.9rem !important;
+            .history-table-wrap {
+                padding: 0 0.5rem 1rem !important;
+                overflow-x: auto !important;
+            }
+        }
+
+        @keyframes blink {
+            0% {
+                background-color: var(--blue);
             }
 
-            .direction-badge {
-                font-size: 0.65rem !important;
-                padding: 0.1rem 0.4rem !important;
+            50% {
+                background-color: var(--green);
+                transform: scale(1.2);
             }
 
-            .trade-card {
-                padding: 0.5rem 0.7rem !important;
-                gap: 0.35rem !important;
+            100% {
+                background-color: var(--blue);
             }
+        }
 
-            .trade-details {
-                display: flex !important;
-                flex-wrap: wrap !important;
-                gap: 0.3rem 0.8rem !important;
-                padding: 0.4rem 0.6rem !important;
-                background: rgba(255, 255, 255, 0.02) !important;
-                border-radius: 8px !important;
-            }
-
-            .detail-item {
-                flex-direction: row !important;
-                align-items: center !important;
-                gap: 0.3rem !important;
-                width: auto !important;
-                min-width: 42% !important;
-            }
-
-            .detail-label {
-                font-size: 0.65rem !important;
-                white-space: nowrap;
-            }
-
-            .detail-value {
-                font-size: 0.8rem !important;
-                font-weight: 600;
-            }
-
-            .projections-row {
-                display: flex !important;
-                flex-direction: row !important;
-                justify-content: space-between !important;
-                gap: 0.3rem !important;
-                padding: 0.2rem 0 !important;
-                font-size: 0.7rem !important;
-            }
-
-            .progress-bar-container {
-                height: 3px !important;
-                margin-top: 0.1rem !important;
-            }
-
-            .pending-card {
-                padding: 0.5rem 0.7rem !important;
-            }
+        .blink-anim {
+            animation: blink 0.8s ease-in-out 3;
         }
 
         .section-header {
@@ -1012,10 +1066,10 @@
 
         <!-- Mobile Tabs -->
         <div class="mobile-tabs" id="mobile-tabs">
-            <button class="mobile-tab-btn active" onclick="switchMobileTab('positions')">Active <span
+            <button class="mobile-tab-btn active" data-tab="positions" onclick="switchMobileTab('positions', event)">Active <span
                     class="mobile-badge" id="mob-active-badge-count"></span></button>
-            <button class="mobile-tab-btn" onclick="switchMobileTab('watchlist')">Watchlist</button>
-            <button class="mobile-tab-btn" onclick="switchMobileTab('pending')">Pending <span class="mobile-badge"
+            <button class="mobile-tab-btn" data-tab="watchlist" onclick="switchMobileTab('watchlist', event)">Watchlist</button>
+            <button class="mobile-tab-btn" data-tab="pending" onclick="switchMobileTab('pending', event)">Pending <span class="mobile-badge"
                     id="mob-pending-badge-count"></span></button>
         </div>
 
@@ -1048,7 +1102,7 @@
             </div>
 
             <!-- Right Sidebar -->
-            <div class="right-sidebar active-mobile-tab"
+            <div class="right-sidebar"
                 style="display:flex; flex-direction:column; overflow:hidden; gap:0; height:100%;">
                 <!-- Watchlist -->
                 <div class="watchlist-section" id="sec-watchlist" style="margin-bottom: 0.6rem; flex-shrink:0;">
@@ -1139,24 +1193,32 @@
             renderWatchlist();
         }
 
-        function switchMobileTab(tabName) {
+        function switchMobileTab(tabName, evt) {
             // Update buttons
             const btns = document.querySelectorAll('.mobile-tab-btn');
             btns.forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
+            const targetBtn = evt ? evt.currentTarget : document.querySelector(`.mobile-tab-btn[data-tab="${tabName}"]`);
+            if (targetBtn) targetBtn.classList.add('active');
 
             // Update sections
-            document.getElementById('sec-positions').classList.remove('active-mobile-tab');
-            document.getElementById('sec-watchlist').classList.remove('active-mobile-tab');
-            document.getElementById('sec-pending').classList.remove('active-mobile-tab');
+            const secPos = document.getElementById('sec-positions');
+            const secWl = document.getElementById('sec-watchlist');
+            const secPend = document.getElementById('sec-pending');
+            const sidebar = document.querySelector('.right-sidebar');
 
-            document.getElementById('sec-' + tabName).classList.add('active-mobile-tab');
+            if (secPos) secPos.classList.remove('active-mobile-tab');
+            if (secWl) secWl.classList.remove('active-mobile-tab');
+            if (secPend) secPend.classList.remove('active-mobile-tab');
+            if (sidebar) sidebar.classList.remove('active-mobile-tab');
 
-            // The parent right-sidebar also needs display toggling for mobile
             if (tabName === 'positions') {
-                document.querySelector('.right-sidebar').classList.remove('active-mobile-tab');
-            } else {
-                document.querySelector('.right-sidebar').classList.add('active-mobile-tab');
+                if (secPos) secPos.classList.add('active-mobile-tab');
+            } else if (tabName === 'watchlist') {
+                if (sidebar) sidebar.classList.add('active-mobile-tab');
+                if (secWl) secWl.classList.add('active-mobile-tab');
+            } else if (tabName === 'pending') {
+                if (sidebar) sidebar.classList.add('active-mobile-tab');
+                if (secPend) secPend.classList.add('active-mobile-tab');
             }
         }
 
@@ -1523,7 +1585,7 @@
                         return `
                         <div class="trade-card">
                             <div class="trade-header">
-                                <div class="trade-info" style="width: 100%; display: flex; align-items: center;">
+                                <div class="trade-info" style="width: 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem;">
                                     <span class="ticker-name">${trade.ticker}</span>
                                     <span class="direction-badge ${direction === 'BUY' ? 'buy' : 'sell'}">
                                         ${direction === 'BUY' ? 'Long' : 'Short'}
