@@ -112,10 +112,21 @@ Executes a simulated backtest across 50 liquid stocks and displays win rate, pro
 python3 backtest_vyuha.py
 ```
 
-### D. Single Scan Cycle (Process releases immediately)
+### D. Run Continuous Live Market Scanner (Runs till 3:30 PM Close)
+By default, the engine runs continuously throughout live market hours:
 ```bash
 python3 breakout_scanner.py
 ```
+*(Continuously monitors active positions every 30s, runs 15m Vyuha & Advanced Trend scans, executes hourly swing scans, and triggers the 3:15 PM EOD scan before completing gracefully at 3:30 PM).*
+
+* **24/7 Background Daemon Mode:**
+  ```bash
+  python3 breakout_scanner.py --daemon
+  ```
+* **Single One-Off Scan (Exits immediately):**
+  ```bash
+  python3 breakout_scanner.py --once
+  ```
 
 ---
 
