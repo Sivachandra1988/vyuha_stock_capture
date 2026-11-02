@@ -249,7 +249,7 @@ def get_dynamic_tickers():
 
     return list(tickers)
 
-def check_utbot_for_dataframe(ticker, df, key_value=1.0, atr_period=10):
+def check_utbot_for_dataframe(ticker, df, key_value=1.5, atr_period=10):
     """
     Calculates UT Bot Alerts (ATR trailing stop) and returns Buy/Sell signal.
     """

@@ -1,10 +1,22 @@
 import os
+import sys
 import json
 import csv
 import pandas as pd
 from datetime import datetime
 from db_cache import get_cached_yfinance
 import db_storage
+
+if hasattr(sys.stdout, "reconfigure") and sys.stdout.encoding != "utf-8":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure") and sys.stderr.encoding != "utf-8":
+    try:
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA_DIR = os.path.join(BASE_DIR, "data")
@@ -60,7 +72,6 @@ def initiate_paper_trade(ticker, result):
     """Initiates a new paper trade tracking entry in paper_trades.json."""
     trades = load_paper_trades()
     
-    # Check if we already have an active/pending trade for this symbol to avoid duplicates
     active_count = 0
     pending_count = 0
     
@@ -74,11 +85,9 @@ def initiate_paper_trade(ticker, result):
             print(f"Trade already exists for {ticker} (Status: {t['status']}). Skipping initiation.")
             return
             
-    if active_count >= 2:
+    if active_count >= 5:
         print(f"Global limit reached: {active_count} ACTIVE positions. Skipping initiation for {ticker}.")
         return
-        
-    # Removed global pending limit to allow EOD scanner to populate pending setups
             
     # Calculate quantity based on risk: Risk ₹1,000 per trade
     risk_per_share = abs(result['entry'] - result['sl'])
@@ -125,7 +134,6 @@ def update_and_manage_trades(send_telegram_fn):
     
     live_quotes = {}
     if angelone.is_authenticated and active_tickers:
-        # Silently fetch live feed in the background
         live_quotes = angelone.get_live_ohlc(active_tickers)
     
     for trade in trades:
@@ -151,7 +159,7 @@ def update_and_manage_trades(send_telegram_fn):
                     try:
                         setup_dt = datetime.strptime(trade["setup_date"], "%Y-%m-%d")
                         calendar_days = (datetime.now() - setup_dt).days
-                        trading_days_elapsed = int(calendar_days * 5 / 7)
+                        trading_days_elapsed = max(0, int(calendar_days * 5 / 7))
                     except Exception:
                         pass
             else:
@@ -172,7 +180,7 @@ def update_and_manage_trades(send_telegram_fn):
                 setup_date = trade.get("setup_date")
                 if setup_date in df.index.strftime("%Y-%m-%d"):
                     setup_idx = df.index.strftime("%Y-%m-%d").get_loc(setup_date)
-                    trading_days_elapsed = len(df) - 1 - setup_idx
+                    trading_days_elapsed = max(0, len(df) - 1 - setup_idx)
             
             if trade["status"] == "PENDING":
                 trade_type = trade.get("trade_type", "POSITIONAL")
@@ -182,7 +190,7 @@ def update_and_manage_trades(send_telegram_fn):
                     trade["status"] = "CLOSED"
                     trade["exit_date"] = date_str
                     reason_msg = "Expired at End of Day." if max_wait == 0 else f"Not triggered within {max_wait} trading days."
-                    msg = f"[INFO] SETUP EXPIRED (CANCELLED)\nStock: #{ticker}\nReason: {reason_msg}"
+                    msg = f"⏱️ *[SETUP EXPIRED] CANCELLED: #{ticker}*\nReason: {reason_msg}"
                     print(msg)
                     send_telegram_fn(msg)
                     remove_from_watchlist(ticker)
@@ -192,22 +200,31 @@ def update_and_manage_trades(send_telegram_fn):
                     breached = False
                     entry_p = trade["entry_price"]
                     sl = trade["initial_sl"]
+                    is_setup_day = (trade.get("setup_date") == date_str)
                     
                     if direction == "BUY":
-                        if low <= sl:
-                            breached = True
-                        elif high >= entry_p:
-                            triggered = True
+                        if is_setup_day:
+                            breached = (close <= sl)
+                            triggered = (close >= entry_p or high >= entry_p)
+                        else:
+                            if low <= sl:
+                                breached = True
+                            elif high >= entry_p:
+                                triggered = True
                     elif direction == "SELL":
-                        if high >= sl:
-                            breached = True
-                        elif low <= entry_p:
-                            triggered = True
+                        if is_setup_day:
+                            breached = (close >= sl)
+                            triggered = (close <= entry_p or low <= entry_p)
+                        else:
+                            if high >= sl:
+                                breached = True
+                            elif low <= entry_p:
+                                triggered = True
                             
                     if breached and not triggered:
                         trade["status"] = "CLOSED"
                         trade["exit_date"] = date_str
-                        msg = f"[INFO] SETUP BREACHED (CANCELLED)\nStock: #{ticker}\nReason: Price hit Stop Loss ({sl:.2f}) before Entry."
+                        msg = f"⚠️ *[SETUP BREACHED] CANCELLED: #{ticker}*\nReason: Price breached Stop Loss ({sl:.2f}) before Entry."
                         print(msg)
                         send_telegram_fn(msg)
                         remove_from_watchlist(ticker)
@@ -215,13 +232,13 @@ def update_and_manage_trades(send_telegram_fn):
                     elif triggered:
                         trade["status"] = "ACTIVE"
                         trade["entry_date"] = date_str
-                        dir_label = "BUY / Buy CALL" if direction == "BUY" else "SELL / Buy PUT"
-                        msg = (f"[INFO] PAPER TRADE TRIGGERED (REALTIME ENTRY)\n"
-                               f"Stock: #{ticker} ({dir_label})\n"
-                               f"Entry Price: `{entry_p:.2f}`\n"
-                               f"Initial Stop Loss: `{trade['initial_sl']:.2f}`\n"
-                               f"Target 1 (1:2): `{trade['target1']:.2f}`\n"
-                               f"Target 2 (1:3): `{trade['target2']:.2f}`")
+                        dir_label = "BUY / CALL" if direction == "BUY" else "SELL / PUT"
+                        msg = (f"🚀 *[TRADE TRIGGERED] REALTIME ENTRY: #{ticker}*\n"
+                               f"• *Direction:* {dir_label}\n"
+                               f"• *Entry Price:* `{entry_p:.2f}`\n"
+                               f"• *Initial Stop Loss:* `{trade['initial_sl']:.2f}`\n"
+                               f"• *Target 1 (1:2):* `{trade['target1']:.2f}`\n"
+                               f"• *Target 2 (1:3):* `{trade['target2']:.2f}`")
                         print(msg)
                         send_telegram_fn(msg)
                         has_changes = True
@@ -240,40 +257,56 @@ def update_and_manage_trades(send_telegram_fn):
                     try:
                         entry_dt = datetime.strptime(trade["entry_date"], "%Y-%m-%d")
                         current_dt = datetime.strptime(date_str, "%Y-%m-%d")
-                        duration = (current_dt - entry_dt).days
+                        duration = max(0, (current_dt - entry_dt).days)
                     except Exception:
                         pass
                 
+                is_entry_day = (trade.get("entry_date") == date_str)
+                # On day of entry, evaluate risk/stops using live LTP (close) so morning wicks before trade entry do not trigger premature exits
+                eval_low = close if is_entry_day else low
+                eval_high = close if is_entry_day else high
+
+                # Max holding duration guard (e.g. 1 day for Intraday, 15 days for Positional/Swing)
+                max_hold = 1 if trade.get("trade_type") == "INTRADAY" else 15
+                if duration >= max_hold:
+                    trade["status"] = "CLOSED"
+                    trade["exit_date"] = date_str
+                    pnl = (close - entry_p) * qty if direction == "BUY" else (entry_p - close) * qty
+                    res_lbl = "PROFIT" if pnl > 0 else "LOSS"
+                    log_closed_trade(ticker, direction, entry_p, initial_sl, t1, t2, close, pnl, res_lbl, "MAX_HOLD_EXPIRED", duration, trade.get("trade_type", "POSITIONAL"), trade.get("strategy", "NR7"))
+                    msg = (f"⏱️ *[EXIT] MAX HOLDING REACHED ({duration} Days): #{ticker}*\n"
+                           f"• *Exit Price:* `{close:.2f}` (Market Close)\n"
+                           f"• *PnL:* `Rs.{pnl:.2f}` ({res_lbl})")
+                    print(msg)
+                    send_telegram_fn(msg)
+                    remove_from_watchlist(ticker)
+                    has_changes = True
+                    continue
+                
                 if direction == "BUY":
                     if status == "ACTIVE":
-                        # Check Intraday Time Stop first
                         now_time = datetime.now().time()
                         is_past_cutoff = now_time >= datetime.strptime("15:15:00", "%H:%M:%S").time()
                         is_carry_over = trade.get("entry_date") and trade["entry_date"] < date_str
                         
                         if trade.get("trade_type") == "INTRADAY" and (is_past_cutoff or is_carry_over):
-                            # Only attempt carry-over at the actual cut-off today, not on stale carry-overs
                             if is_past_cutoff and not is_carry_over and evaluate_daily_trend(ticker, "BUY"):
                                 trade["trade_type"] = "POSITIONAL"
-                                msg = (f"[INFO] HOLDING OVERNIGHT (CONVERSION)\n"
-                                       f"Stock: #{ticker}\n"
+                                msg = (f"🔄 *[HOLDING OVERNIGHT] CONVERSION: #{ticker}*\n"
                                        f"Reason: Daily trend is strong (EMA 10>20, RSI>50)\n"
                                        f"Type: INTRADAY -> POSITIONAL")
                                 print(msg)
                                 send_telegram_fn(msg)
                                 has_changes = True
-                                # Wait for targets as usual
                             else:
                                 trade["status"] = "CLOSED"
                                 trade["exit_date"] = date_str
                                 pnl = (close - entry_p) * qty
                                 result_lbl = "PROFIT" if pnl > 0 else "LOSS"
                                 log_closed_trade(ticker, direction, entry_p, initial_sl, t1, t2, close, pnl, result_lbl, "INTRADAY_TIME_STOP", duration, trade.get("trade_type", "POSITIONAL"), trade.get("strategy", "NR7"))
-                                msg = (f"[INFO] INTRADAY TIME STOP (EXIT)\n"
-                                       f"Stock: #{ticker}\n"
-                                       f"Exit Price: `{close:.2f}` (At Close)\n"
-                                       f"PnL: `Rs.{pnl:.2f}`\n"
-                                       f"Result: {result_lbl}")
+                                msg = (f"⏱️ *[EXIT] INTRADAY TIME STOP: #{ticker}*\n"
+                                       f"• *Exit Price:* `{close:.2f}`\n"
+                                       f"• *PnL:* `Rs.{pnl:.2f}` ({result_lbl})")
                                 print(msg)
                                 send_telegram_fn(msg)
                                 remove_from_watchlist(ticker)
@@ -283,76 +316,70 @@ def update_and_manage_trades(send_telegram_fn):
                         current_active_sl = trade.get("current_sl", initial_sl)
                         risk = entry_p - initial_sl
                         
-                        if high >= entry_p + risk and current_active_sl < entry_p:
+                        if eval_high >= entry_p + risk and current_active_sl < entry_p:
                             trade["current_sl"] = entry_p
                             current_active_sl = entry_p
-                            msg = (f"[INFO] TRAILING SL (1R HIT)\n"
-                                   f"Stock: #{ticker} (BUY)\n"
-                                   f"Action: Trailed SL to Breakeven @ `{entry_p:.2f}`")
+                            msg = (f"🎯 *[TRAILING SL] 1R HIT: #{ticker}*\n"
+                                   f"• *Action:* Trailed Stop-Loss to Breakeven @ `{entry_p:.2f}`")
                             print(msg)
                             send_telegram_fn(msg)
                             has_changes = True
 
-                        if low <= current_active_sl:
+                        if eval_low <= current_active_sl:
                             trade["status"] = "CLOSED"
                             trade["exit_date"] = date_str
                             pnl = (current_active_sl - entry_p) * qty
-                            log_closed_trade(ticker, direction, entry_p, initial_sl, t1, t2, current_active_sl, pnl, "LOSS" if pnl < 0 else "BREAKEVEN", "HIT_SL", duration, trade.get("trade_type", "POSITIONAL"), trade.get("strategy", "NR7"))
-                            msg = (f"[INFO] STOP LOSS HIT (EXIT)\n"
-                                   f"Stock: #{ticker}\n"
-                                   f"Exit Price: `{current_active_sl:.2f}`\n"
-                                   f"PnL: `Rs.{pnl:.2f}`\n"
-                                   f"Result: LOSS" if pnl < 0 else f"Result: BREAKEVEN")
+                            res_lbl = "LOSS" if pnl < 0 else "BREAKEVEN"
+                            exit_lbl = "STOP LOSS" if pnl < 0 else "BREAKEVEN SL"
+                            log_closed_trade(ticker, direction, entry_p, initial_sl, t1, t2, current_active_sl, pnl, res_lbl, "HIT_SL", duration, trade.get("trade_type", "POSITIONAL"), trade.get("strategy", "NR7"))
+                            msg = (f"🛑 *[EXIT] {exit_lbl} HIT: #{ticker}*\n"
+                                   f"• *Exit Price:* `{current_active_sl:.2f}`\n"
+                                   f"• *PnL:* `Rs.{pnl:.2f}` ({res_lbl})\n"
+                                   f"• *Duration:* {duration} days")
                             print(msg)
                             send_telegram_fn(msg)
                             remove_from_watchlist(ticker)
                             has_changes = True
-                        elif high >= t1:
+                        elif eval_high >= t1:
                             trade["status"] = "PARTIAL_EXIT"
                             trade["current_sl"] = entry_p
                             pnl = (t1 - entry_p) * (qty / 2)
                             log_closed_trade(ticker, direction, entry_p, initial_sl, t1, t2, t1, pnl, "PROFIT", "HIT_TARGET_1", duration, trade.get("trade_type", "POSITIONAL"), trade.get("strategy", "NR7"))
-                            msg = (f"[INFO] PARTIAL TARGET 1 HIT (50% BOOKED)\n"
-                                   f"Stock: #{ticker}\n"
-                                   f"Exit Price: `{t1:.2f}` (T1)\n"
-                                   f"PnL Booked: `Rs.{pnl:.2f}`\n"
-                                   f"Action: Trailed Stop Loss to Breakeven @ `{entry_p:.2f}`")
+                            msg = (f"🎯 *[TARGET 1 HIT] 50% BOOKED: #{ticker}*\n"
+                                   f"• *Exit Price:* `{t1:.2f}` (T1)\n"
+                                   f"• *PnL Booked:* `Rs.{pnl:.2f}`\n"
+                                   f"• *Action:* Trailed Stop Loss to Breakeven @ `{entry_p:.2f}`")
                             print(msg)
                             send_telegram_fn(msg)
                             has_changes = True
                             
                     elif status == "PARTIAL_EXIT":
-                        if low <= current_sl:
+                        if eval_low <= current_sl:
                             trade["status"] = "CLOSED"
                             trade["exit_date"] = date_str
                             pnl = (current_sl - entry_p) * (qty / 2)
                             log_closed_trade(ticker, direction, entry_p, initial_sl, t1, t2, current_sl, pnl, "BREAKEVEN", "HIT_SL_BREAKEVEN", duration, trade.get("trade_type", "POSITIONAL"), trade.get("strategy", "NR7"))
-                            msg = (f"[INFO] BREAKEVEN SL HIT (EXIT)\n"
-                                   f"Stock: #{ticker}\n"
-                                   f"Exit Price: `{current_sl:.2f}` (Breakeven SL)\n"
-                                   f"PnL Booked: `Rs.{pnl:.2f}`\n"
-                                   f"Result: BREAKEVEN")
+                            msg = (f"🛑 *[EXIT] BREAKEVEN SL HIT: #{ticker}*\n"
+                                   f"• *Exit Price:* `{current_sl:.2f}` (Breakeven)\n"
+                                   f"• *PnL Booked:* `Rs.{pnl:.2f}` (BREAKEVEN)")
                             print(msg)
                             send_telegram_fn(msg)
                             remove_from_watchlist(ticker)
                             has_changes = True
-                        elif high >= t2:
+                        elif eval_high >= t2:
                             trade["status"] = "CLOSED"
                             trade["exit_date"] = date_str
                             pnl = (t2 - entry_p) * (qty / 2)
                             log_closed_trade(ticker, direction, entry_p, initial_sl, t1, t2, t2, pnl, "PROFIT", "HIT_TARGET_2", duration, trade.get("trade_type", "POSITIONAL"), trade.get("strategy", "NR7"))
-                            msg = (f"[INFO] TARGET 2 HIT (FULL EXIT)\n"
-                                   f"Stock: #{ticker}\n"
-                                   f"Exit Price: `{t2:.2f}` (T2)\n"
-                                   f"PnL Booked: `Rs.{pnl:.2f}`\n"
-                                   f"Result: PROFIT")
+                            msg = (f"🚀 *[TARGET 2 HIT] FULL EXIT: #{ticker}*\n"
+                                   f"• *Exit Price:* `{t2:.2f}` (T2)\n"
+                                   f"• *PnL Booked:* `Rs.{pnl:.2f}` (PROFIT)")
                             print(msg)
                             send_telegram_fn(msg)
                             has_changes = True
                             
                 elif direction == "SELL":
                     if status == "ACTIVE":
-                        # Check Intraday Time Stop first
                         now_time = datetime.now().time()
                         is_past_cutoff = now_time >= datetime.strptime("15:15:00", "%H:%M:%S").time()
                         is_carry_over = trade.get("entry_date") and trade["entry_date"] < date_str
@@ -360,25 +387,21 @@ def update_and_manage_trades(send_telegram_fn):
                         if trade.get("trade_type") == "INTRADAY" and (is_past_cutoff or is_carry_over):
                             if is_past_cutoff and not is_carry_over and evaluate_daily_trend(ticker, "SELL"):
                                 trade["trade_type"] = "POSITIONAL"
-                                msg = (f"[INFO] HOLDING OVERNIGHT (CONVERSION)\n"
-                                       f"Stock: #{ticker}\n"
+                                msg = (f"🔄 *[HOLDING OVERNIGHT] CONVERSION: #{ticker}*\n"
                                        f"Reason: Daily trend is strong (EMA 10<20, RSI<50)\n"
                                        f"Type: INTRADAY -> POSITIONAL")
                                 print(msg)
                                 send_telegram_fn(msg)
                                 has_changes = True
-                                # Wait for targets as usual
                             else:
                                 trade["status"] = "CLOSED"
                                 trade["exit_date"] = date_str
                                 pnl = (entry_p - close) * qty
                                 result_lbl = "PROFIT" if pnl > 0 else "LOSS"
                                 log_closed_trade(ticker, direction, entry_p, initial_sl, t1, t2, close, pnl, result_lbl, "INTRADAY_TIME_STOP", duration, trade.get("trade_type", "POSITIONAL"), trade.get("strategy", "NR7"))
-                                msg = (f"[INFO] INTRADAY TIME STOP (EXIT)\n"
-                                       f"Stock: #{ticker}\n"
-                                       f"Exit Price: `{close:.2f}` (At Close)\n"
-                                       f"PnL: `Rs.{pnl:.2f}`\n"
-                                       f"Result: {result_lbl}")
+                                msg = (f"⏱️ *[EXIT] INTRADAY TIME STOP: #{ticker}*\n"
+                                       f"• *Exit Price:* `{close:.2f}`\n"
+                                       f"• *PnL:* `Rs.{pnl:.2f}` ({result_lbl})")
                                 print(msg)
                                 send_telegram_fn(msg)
                                 remove_from_watchlist(ticker)
@@ -388,67 +411,64 @@ def update_and_manage_trades(send_telegram_fn):
                         current_active_sl = trade.get("current_sl", initial_sl)
                         risk = initial_sl - entry_p
                         
-                        if low <= entry_p - risk and current_active_sl > entry_p:
+                        if eval_low <= entry_p - risk and current_active_sl > entry_p:
                             trade["current_sl"] = entry_p
                             current_active_sl = entry_p
-                            msg = (f"[INFO] TRAILING SL (1R HIT)\n"
-                                   f"Stock: #{ticker} (SELL)\n"
-                                   f"Action: Trailed SL to Breakeven @ `{entry_p:.2f}`")
+                            msg = (f"🎯 *[TRAILING SL] 1R HIT: #{ticker}*\n"
+                                   f"• *Action:* Trailed Stop-Loss to Breakeven @ `{entry_p:.2f}`")
                             print(msg)
                             send_telegram_fn(msg)
                             has_changes = True
 
-                        if high >= current_active_sl:
+                        if eval_high >= current_active_sl:
                             trade["status"] = "CLOSED"
                             trade["exit_date"] = date_str
                             pnl = (entry_p - current_active_sl) * qty
-                            log_closed_trade(ticker, direction, entry_p, initial_sl, t1, t2, current_active_sl, pnl, "LOSS" if pnl < 0 else "BREAKEVEN", "HIT_SL", duration, trade.get("trade_type", "POSITIONAL"), trade.get("strategy", "NR7"))
-                            msg = (f"[INFO] STOP LOSS HIT (EXIT)\n"
-                                   f"Stock: #{ticker}\n"
-                                   f"Exit Price: `{current_active_sl:.2f}`\n"
-                                   f"PnL: `Rs.{pnl:.2f}`\n"
-                                   f"Result: LOSS" if pnl < 0 else f"Result: BREAKEVEN")
+                            res_lbl = "LOSS" if pnl < 0 else "BREAKEVEN"
+                            exit_lbl = "STOP LOSS" if pnl < 0 else "BREAKEVEN SL"
+                            log_closed_trade(ticker, direction, entry_p, initial_sl, t1, t2, current_active_sl, pnl, res_lbl, "HIT_SL", duration, trade.get("trade_type", "POSITIONAL"), trade.get("strategy", "NR7"))
+                            msg = (f"🛑 *[EXIT] {exit_lbl} HIT: #{ticker}*\n"
+                                   f"• *Exit Price:* `{current_active_sl:.2f}`\n"
+                                   f"• *PnL:* `Rs.{pnl:.2f}` ({res_lbl})\n"
+                                   f"• *Duration:* {duration} days")
                             print(msg)
                             send_telegram_fn(msg)
+                            remove_from_watchlist(ticker)
                             has_changes = True
-                        elif low <= t1:
+                        elif eval_low <= t1:
                             trade["status"] = "PARTIAL_EXIT"
                             trade["current_sl"] = entry_p
                             pnl = (entry_p - t1) * (qty / 2)
                             log_closed_trade(ticker, direction, entry_p, initial_sl, t1, t2, t1, pnl, "PROFIT", "HIT_TARGET_1", duration, trade.get("trade_type", "POSITIONAL"), trade.get("strategy", "NR7"))
-                            msg = (f"[INFO] PARTIAL TARGET 1 HIT (50% BOOKED)\n"
-                                   f"Stock: #{ticker}\n"
-                                   f"Exit Price: `{t1:.2f}` (T1)\n"
-                                   f"PnL Booked: `Rs.{pnl:.2f}`\n"
-                                   f"Action: Trailed Stop Loss to Breakeven @ `{entry_p:.2f}`")
+                            msg = (f"🎯 *[TARGET 1 HIT] 50% BOOKED: #{ticker}*\n"
+                                   f"• *Exit Price:* `{t1:.2f}` (T1)\n"
+                                   f"• *PnL Booked:* `Rs.{pnl:.2f}`\n"
+                                   f"• *Action:* Trailed Stop Loss to Breakeven @ `{entry_p:.2f}`")
                             print(msg)
                             send_telegram_fn(msg)
                             has_changes = True
                             
                     elif status == "PARTIAL_EXIT":
-                        if high >= current_sl:
+                        if eval_high >= current_sl:
                             trade["status"] = "CLOSED"
                             trade["exit_date"] = date_str
                             pnl = (entry_p - current_sl) * (qty / 2)
                             log_closed_trade(ticker, direction, entry_p, initial_sl, t1, t2, current_sl, pnl, "BREAKEVEN", "HIT_SL_BREAKEVEN", duration, trade.get("trade_type", "POSITIONAL"), trade.get("strategy", "NR7"))
-                            msg = (f"[INFO] BREAKEVEN SL HIT (EXIT)\n"
-                                   f"Stock: #{ticker}\n"
-                                   f"Exit Price: `{current_sl:.2f}` (Breakeven SL)\n"
-                                   f"PnL Booked: `Rs.{pnl:.2f}`\n"
-                                   f"Result: BREAKEVEN")
+                            msg = (f"🛑 *[EXIT] BREAKEVEN SL HIT: #{ticker}*\n"
+                                   f"• *Exit Price:* `{current_sl:.2f}` (Breakeven)\n"
+                                   f"• *PnL Booked:* `Rs.{pnl:.2f}` (BREAKEVEN)")
                             print(msg)
                             send_telegram_fn(msg)
+                            remove_from_watchlist(ticker)
                             has_changes = True
-                        elif low <= t2:
+                        elif eval_low <= t2:
                             trade["status"] = "CLOSED"
                             trade["exit_date"] = date_str
                             pnl = (entry_p - t2) * (qty / 2)
                             log_closed_trade(ticker, direction, entry_p, initial_sl, t1, t2, t2, pnl, "PROFIT", "HIT_TARGET_2", duration, trade.get("trade_type", "POSITIONAL"), trade.get("strategy", "NR7"))
-                            msg = (f"[INFO] TARGET 2 HIT (FULL EXIT)\n"
-                                   f"Stock: #{ticker}\n"
-                                   f"Exit Price: `{t2:.2f}` (T2)\n"
-                                   f"PnL Booked: `Rs.{pnl:.2f}`\n"
-                                   f"Result: PROFIT")
+                            msg = (f"🚀 *[TARGET 2 HIT] FULL EXIT: #{ticker}*\n"
+                                   f"• *Exit Price:* `{t2:.2f}` (T2)\n"
+                                   f"• *PnL Booked:* `Rs.{pnl:.2f}` (PROFIT)")
                             print(msg)
                             send_telegram_fn(msg)
                             has_changes = True
