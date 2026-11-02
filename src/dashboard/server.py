@@ -472,6 +472,33 @@ def delete_from_watchlist(ticker: str):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+@app.get("/api/chart/{ticker}")
+def get_chart_data(ticker: str, period: str = "3mo"):
+    clean_ticker = ticker.strip().upper().replace(".NS", "").replace(".BO", "")
+    try:
+        df = yf.download(f"{clean_ticker}.NS", period=period, interval="1d", progress=False, auto_adjust=True)
+        if df.empty:
+            df = yf.download(f"{clean_ticker}.BO", period=period, interval="1d", progress=False, auto_adjust=True)
+        if df.empty:
+            return {"status": "error", "message": f"No chart data found for {clean_ticker}"}
+        
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+            
+        candles = []
+        for idx, row in df.iterrows():
+            candles.append({
+                "time": idx.strftime("%Y-%m-%d"),
+                "open": round(float(row["Open"]), 2),
+                "high": round(float(row["High"]), 2),
+                "low": round(float(row["Low"]), 2),
+                "close": round(float(row["Close"]), 2),
+                "volume": int(row.get("Volume", 0))
+            })
+        return {"status": "success", "ticker": clean_ticker, "candles": candles}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 import socket
 import argparse
 

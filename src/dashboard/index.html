@@ -7,6 +7,7 @@
     <title>VYUHA TRADER-PILOT | Institutional Trading Engine</title>
     <link rel="icon" type="image/jpeg" href="/brand_icon.jpg">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         :root {
             --bg-color: #0b0c10;
@@ -2027,21 +2028,145 @@
         </div>
     </div>
 
-    <!-- TradingView Script -->
+    <!-- TradingView & Lightweight Charts Script -->
     <script>
-        function renderTvChart(cleanTicker) {
+        let activeChartInstance = null;
+
+        async function renderTvChart(cleanTicker, levels) {
             const container = document.getElementById('tv_chart_container');
             if (!container) return;
-            container.innerHTML = '';
+            container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#94a3b8;font-size:1rem;">⏳ Loading live candlesticks for ' + cleanTicker + '...</div>';
 
-            // Embed official TradingView interactive charting widget on NSE symbol
-            const iframe = document.createElement('iframe');
-            iframe.style.width = '100%';
-            iframe.style.height = '100%';
-            iframe.style.border = 'none';
-            iframe.setAttribute('allowfullscreen', 'true');
-            iframe.src = `https://s.tradingview.com/widgetembed/?symbol=NSE%3A${encodeURIComponent(cleanTicker)}&interval=D&hidetoptoolbar=0&symboledit=1&saveimage=0&toolbarbg=131722&studies=%5B%7B%22id%22%3A%22MAExp%40tv-basicstudies%22%2C%22inputs%22%3A%7B%22length%22%3A9%7D%7D%2C%7B%22id%22%3A%22MASimple%40tv-basicstudies%22%2C%22inputs%22%3A%7B%22length%22%3A21%7D%7D%5D&theme=dark&style=1&timezone=Asia%2FKolkata&locale=in`;
-            container.appendChild(iframe);
+            try {
+                const res = await fetch(`/api/chart/${cleanTicker}`);
+                const data = await res.json();
+                if (!data || data.status !== 'success' || !data.candles || data.candles.length === 0) {
+                    container.innerHTML = `
+                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;color:#94a3b8;padding:20px;text-align:center;">
+                            <div style="font-size:1.1rem;font-weight:600;color:#fff;">Exchange Feed Restriction Notice</div>
+                            <div style="max-width:500px;font-size:0.85rem;line-height:1.5;">NSE/BSE exchange policies restrict raw embedded widget streams for certain equities. Click below to launch this stock directly in TradingView.</div>
+                            <a href="https://in.tradingview.com/chart/?symbol=NSE%3A${cleanTicker}" target="_blank" style="padding:10px 22px;background:#3b82f6;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;margin-top:8px;box-shadow:0 4px 12px rgba(59,130,246,0.4);">🚀 Open in TradingView Web / App</a>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = '';
+                if (typeof LightweightCharts === 'undefined') {
+                    container.innerHTML = `
+                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;color:#94a3b8;">
+                            <div>Interactive charting library unavailable.</div>
+                            <a href="https://in.tradingview.com/chart/?symbol=NSE%3A${cleanTicker}" target="_blank" style="padding:10px 20px;background:#3b82f6;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Open in TradingView App</a>
+                        </div>
+                    `;
+                    return;
+                }
+
+                if (activeChartInstance) {
+                    try { activeChartInstance.remove(); } catch (e) {}
+                    activeChartInstance = null;
+                }
+
+                const chart = LightweightCharts.createChart(container, {
+                    width: container.clientWidth || 800,
+                    height: container.clientHeight || 500,
+                    layout: {
+                        background: { color: '#0f121d' },
+                        textColor: '#94a3b8',
+                    },
+                    grid: {
+                        vertLines: { color: 'rgba(255, 255, 255, 0.04)' },
+                        horzLines: { color: 'rgba(255, 255, 255, 0.04)' },
+                    },
+                    crosshair: {
+                        mode: LightweightCharts.CrosshairMode.Normal,
+                    },
+                    rightPriceScale: {
+                        borderColor: 'rgba(255, 255, 255, 0.1)',
+                    },
+                    timeScale: {
+                        borderColor: 'rgba(255, 255, 255, 0.1)',
+                        timeVisible: true,
+                    },
+                });
+                activeChartInstance = chart;
+
+                // Handle resize dynamically
+                const resizeObserver = new ResizeObserver(entries => {
+                    if (entries.length > 0 && chart) {
+                        chart.applyOptions({
+                            width: entries[0].contentRect.width,
+                            height: entries[0].contentRect.height
+                        });
+                    }
+                });
+                resizeObserver.observe(container);
+
+                const candleSeries = chart.addCandlestickSeries({
+                    upColor: '#10b981',
+                    downColor: '#f43f5e',
+                    borderVisible: false,
+                    wickUpColor: '#10b981',
+                    wickDownColor: '#f43f5e',
+                });
+
+                candleSeries.setData(data.candles);
+
+                // MARK THE EXACT ENTRY, STOP LOSS, AND TARGET LEVELS DIRECTLY ON CANDLESTICKS!
+                if (levels) {
+                    if (levels.entry > 0) {
+                        candleSeries.createPriceLine({
+                            price: levels.entry,
+                            color: '#3b82f6',
+                            lineWidth: 2,
+                            lineStyle: LightweightCharts.LineStyle.Solid,
+                            axisLabelVisible: true,
+                            title: 'ENTRY ₹' + levels.entry.toFixed(2),
+                        });
+                    }
+                    if (levels.sl > 0) {
+                        candleSeries.createPriceLine({
+                            price: levels.sl,
+                            color: '#f43f5e',
+                            lineWidth: 2,
+                            lineStyle: LightweightCharts.LineStyle.Solid,
+                            axisLabelVisible: true,
+                            title: 'STOP LOSS ₹' + levels.sl.toFixed(2),
+                        });
+                    }
+                    if (levels.t1 > 0) {
+                        candleSeries.createPriceLine({
+                            price: levels.t1,
+                            color: '#10b981',
+                            lineWidth: 2,
+                            lineStyle: LightweightCharts.LineStyle.Dashed,
+                            axisLabelVisible: true,
+                            title: 'TARGET 1 ₹' + levels.t1.toFixed(2),
+                        });
+                    }
+                    if (levels.t2 > 0) {
+                        candleSeries.createPriceLine({
+                            price: levels.t2,
+                            color: '#34d399',
+                            lineWidth: 2,
+                            lineStyle: LightweightCharts.LineStyle.Dashed,
+                            axisLabelVisible: true,
+                            title: 'TARGET 2 ₹' + levels.t2.toFixed(2),
+                        });
+                    }
+                }
+
+                chart.timeScale().fitContent();
+
+            } catch (err) {
+                console.error('Chart load error:', err);
+                container.innerHTML = `
+                    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;color:#94a3b8;">
+                        <div>Unable to render chart preview.</div>
+                        <a href="https://in.tradingview.com/chart/?symbol=NSE%3A${cleanTicker}" target="_blank" style="padding:10px 20px;background:#3b82f6;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Open Directly in TradingView</a>
+                    </div>
+                `;
+            }
         }
 
         function openTradingView(ticker, evt) {
@@ -2084,6 +2209,8 @@
             const typeBadge = document.getElementById('tv-type-badge');
             const ltpBadge = document.getElementById('tv-ltp-badge');
 
+            let levelsObj = null;
+
             if (item) {
                 const dir = (item.direction || 'BUY').toUpperCase();
                 const isBuy = dir === 'BUY' || dir === 'LONG';
@@ -2097,6 +2224,8 @@
                 const sl = item.current_sl || item.initial_sl || 0;
                 const t1 = item.target1 || (entry > 0 ? (isBuy ? entry * 1.02 : entry * 0.98) : 0);
                 const t2 = item.target2 || (entry > 0 ? (isBuy ? entry * 1.04 : entry * 0.96) : 0);
+
+                levelsObj = { entry, sl, t1, t2 };
 
                 let levelsHtml = '';
                 if (entry > 0) {
@@ -2147,11 +2276,15 @@
                 levelsBar.style.display = 'none';
             }
 
-            renderTvChart(cleanTicker);
+            renderTvChart(cleanTicker, levelsObj);
         }
 
         function closeTradingViewModal() {
             document.getElementById('tv-modal-overlay').style.display = 'none';
+            if (activeChartInstance) {
+                try { activeChartInstance.remove(); } catch(e){}
+                activeChartInstance = null;
+            }
             const container = document.getElementById('tv_chart_container');
             if (container) {
                 container.innerHTML = '';
