@@ -1365,7 +1365,7 @@
                     const tooltipText = `Stock: ${ticker}\nStrategy: ${strategyDesc}\nDirection: ${trendLabel}\nType: ${typeName}\nProjection (5D): ${projTooltipText}`;
 
                     return `
-                        <div class="pending-card" style="padding: 0.4rem 0.6rem; cursor: pointer;" title="${tooltipText}" onclick="openTradingView('${ticker}')">
+                        <div class="pending-card" style="padding: 0.4rem 0.6rem; cursor: pointer;" title="${tooltipText}" onclick="openTradingView('${ticker}', event)">
                             <div class="pending-left">
                                 <div class="pending-ticker" style="font-size: 0.95rem;">${ticker}</div>
                                 <div style="display:flex; gap:0.3rem; align-items:center; margin-top:0.2rem;">
@@ -1405,6 +1405,7 @@
         }
 
         function updateUI(data) {
+            window.latestData = data;
             const summary = data.summary;
             const trades = data.trades;
             const nifty = data.nifty;
@@ -1586,7 +1587,10 @@
                         <div class="trade-card">
                             <div class="trade-header">
                                 <div class="trade-info" style="width: 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem;">
-                                    <span class="ticker-name">${trade.ticker}</span>
+                                    <span class="ticker-name" onclick="openTradingView('${trade.ticker}', event)" style="cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" title="Click to view TradingView Chart & Levels">
+                                        <span style="border-bottom: 2px solid var(--blue);">${trade.ticker}</span>
+                                        <span style="font-size: 0.68rem; color: #60a5fa; background: rgba(59,130,246,0.18); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(59,130,246,0.3);">📊 Chart</span>
+                                    </span>
                                     <span class="direction-badge ${direction === 'BUY' ? 'buy' : 'sell'}">
                                         ${direction === 'BUY' ? 'Long' : 'Short'}
                                     </span>
@@ -1659,7 +1663,11 @@
                         <div class="pending-card" style="flex-direction: column; align-items: stretch; gap: 0.6rem;">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
                                 <div class="pending-left">
-                                    <div class="pending-ticker">${trade.ticker} <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-secondary); margin-left: 0.5rem;">Qty: ${trade.quantity}</span></div>
+                                    <div class="pending-ticker" onclick="openTradingView('${trade.ticker}', event)" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px;" title="Click to view TradingView Chart & Levels">
+                                        <span style="border-bottom: 2px solid var(--blue); font-weight: 700;">${trade.ticker}</span>
+                                        <span style="font-size: 0.68rem; color: #60a5fa; background: rgba(59,130,246,0.18); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(59,130,246,0.3);">📊 Chart</span>
+                                        <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-secondary); margin-left: 0.3rem;">Qty: ${trade.quantity}</span>
+                                    </div>
                                     <div class="pending-date">Setup: ${trade.setup_date} <span class="direction-badge ${direction === 'BUY' ? 'buy' : 'sell'}" style="margin-left: 0.5rem; font-size: 0.65rem;">${direction === 'BUY' ? 'Long' : 'Short'}</span>${trade.trade_type ? `<span class="direction-badge" style="margin-left: 0.5rem; font-size: 0.65rem; background: ${trade.trade_type === 'INTRADAY' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)'}; color: ${trade.trade_type === 'INTRADAY' ? '#c084fc' : '#60a5fa'};"> ${trade.trade_type === 'INTRADAY' ? 'Intraday' : 'Short Term'}</span>` : ''}${realBadge}</div>
                                 </div>
                                 <div class="pending-right" style="display: flex; flex-direction: column; align-items: flex-end;">
@@ -1883,87 +1891,161 @@
 
     <!-- TradingView Modal -->
     <div id="tv-modal-overlay"
-        style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 99999; backdrop-filter: blur(4px); align-items: center; justify-content: center;">
-        <!-- Close Button moved outside to guarantee clickability -->
-        <button onclick="closeTradingViewModal()"
-            style="position: absolute; right: 20px; top: 20px; z-index: 999999; background: rgba(239, 68, 68, 1); color: white; border: 2px solid #fff; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 22px; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">✕</button>
-
+        style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.88); z-index: 99999; backdrop-filter: blur(6px); align-items: center; justify-content: center; padding: 8px;">
         <div class="modal-content"
-            style="position: relative; width: 95%; max-width: 1400px; height: 90vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; background: #000; border-radius: 8px;">
+            style="position: relative; width: 100%; max-width: 1400px; height: 92vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; background: #0f121d; border-radius: 12px; border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 10px 40px rgba(0,0,0,0.8);">
+            
+            <!-- Top Controls & Levels Bar -->
             <div id="tv-modal-actions"
-                style="padding: 10px; display: flex; justify-content: flex-start; background: #1a1b1e; border-bottom: 1px solid #333;">
-                <a id="tv-external-link" href="#" target="_blank"
-                    style="display: flex; align-items: center; gap: 8px; text-decoration: none; padding: 6px 16px; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa; border-radius: 4px; font-weight: 500; font-size: 14px; transition: all 0.2s;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                        <polyline points="15 3 21 3 21 9"></polyline>
-                        <line x1="10" y1="14" x2="21" y2="3"></line>
-                    </svg>
-                    Open in TradingView Header
-                </a>
+                style="padding: 10px 14px; background: #131722; border-bottom: 1px solid rgba(255, 255, 255, 0.08); display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                    <div id="tv-ticker-info" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <span id="tv-ticker-title" style="font-size: 1.15rem; font-weight: 700; color: #fff;">NSE:STOCK</span>
+                        <span id="tv-type-badge" class="direction-badge buy">LONG</span>
+                        <span id="tv-ltp-badge" style="font-size: 0.85rem; color: #94a3b8; font-weight: 600;"></span>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <a id="tv-external-link" href="#" target="_blank"
+                            style="display: flex; align-items: center; gap: 6px; text-decoration: none; padding: 5px 12px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa; border-radius: 6px; font-weight: 500; font-size: 12px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                            Full Chart
+                        </a>
+                        <button onclick="closeTradingViewModal()"
+                            style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.5); color: #f87171; border-radius: 6px; padding: 5px 14px; cursor: pointer; font-size: 13px; font-weight: 600;">✕ Close</button>
+                    </div>
+                </div>
+
+                <!-- Marked Levels Bar -->
+                <div id="tv-levels-bar"
+                    style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; background: rgba(0, 0, 0, 0.35); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05); font-size: 0.82rem;">
+                </div>
             </div>
-            <div id="tv_chart_container" style="flex: 1; width: 100%; height: 100%;"></div>
+
+            <div id="tv_chart_container" style="flex: 1; width: 100%; height: 100%; position: relative;"></div>
         </div>
     </div>
 
     <!-- TradingView Script -->
-    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
     <script>
-        function openTradingView(ticker) {
-            document.getElementById('tv-modal-overlay').style.display = 'flex';
+        function renderTvChart(cleanTicker) {
+            const container = document.getElementById('tv_chart_container');
+            if (!container) return;
+            container.innerHTML = '';
 
-            // Completely recreate the container to prevent TradingView caching issues
-            const oldContainer = document.getElementById('tv_chart_container');
-            if (oldContainer) {
-                oldContainer.remove();
+            // Embed official TradingView interactive charting widget on NSE symbol
+            const iframe = document.createElement('iframe');
+            iframe.style.width = '100%';
+            iframe.style.height = '100%';
+            iframe.style.border = 'none';
+            iframe.setAttribute('allowfullscreen', 'true');
+            iframe.src = `https://s.tradingview.com/widgetembed/?symbol=NSE%3A${encodeURIComponent(cleanTicker)}&interval=D&hidetoptoolbar=0&symboledit=1&saveimage=0&toolbarbg=131722&studies=%5B%7B%22id%22%3A%22MAExp%40tv-basicstudies%22%2C%22inputs%22%3A%7B%22length%22%3A9%7D%7D%2C%7B%22id%22%3A%22MASimple%40tv-basicstudies%22%2C%22inputs%22%3A%7B%22length%22%3A21%7D%7D%5D&theme=dark&style=1&timezone=Asia%2FKolkata&locale=in`;
+            container.appendChild(iframe);
+        }
+
+        function openTradingView(ticker, evt) {
+            if (evt) {
+                try { evt.stopPropagation(); } catch (e) {}
             }
-            const newContainer = document.createElement('div');
-            newContainer.id = 'tv_chart_container';
-            newContainer.style.flex = "1";
-            newContainer.style.width = "100%";
-            newContainer.style.height = "100%";
-            document.querySelector('#tv-modal-overlay .modal-content').appendChild(newContainer);
 
-            // Clean the ticker (remove .NS suffix, replace hyphens and ampersands with underscores for TradingView)
-            let cleanTicker = ticker.split('.')[0].trim();
+            // Normalize ticker
+            let cleanTicker = (ticker || '').split('.')[0].trim().toUpperCase();
             cleanTicker = cleanTicker.replace(/-/g, '_').replace(/&/g, '_');
+            if (!cleanTicker) return;
 
-            // Set External Link
+            document.getElementById('tv-modal-overlay').style.display = 'flex';
+            document.getElementById('tv-ticker-title').innerText = `NSE:${cleanTicker}`;
+
+            // External direct link
             const extLink = document.getElementById('tv-external-link');
             if (extLink) {
-                extLink.href = 'https://in.tradingview.com/chart/?symbol=NSE%3A' + cleanTicker;
+                extLink.href = `https://in.tradingview.com/chart/?symbol=NSE%3A${cleanTicker}`;
             }
 
-            // Allow browser to paint the modal before initializing the widget
-            setTimeout(() => {
-                new TradingView.widget({
-                    "autosize": true,
-                    "symbol": "BSE:" + cleanTicker,
-                    "interval": "D",
-                    "timezone": "Asia/Kolkata",
-                    "theme": "dark",
-                    "style": "1",
-                    "locale": "in",
-                    "enable_publishing": false,
-                    "backgroundColor": "#000000",
-                    "gridColor": "rgba(42, 46, 57, 0.06)",
-                    "hide_top_toolbar": false,
-                    "hide_legend": false,
-                    "save_image": false,
-                    "container_id": "tv_chart_container",
-                    "studies": [
-                        { id: "MAExp@tv-basicstudies", inputs: { length: 9 } },
-                        { id: "MASimple@tv-basicstudies", inputs: { length: 21 } }
-                    ],
-                    "studies_overrides": {
-                        "moving average exponential.ema.color": "#00FF00",
-                        "moving average exponential.ema.linewidth": 2,
-                        "moving average.ma.color": "#FF0000",
-                        "moving average.ma.linewidth": 2
-                    }
-                });
-            }, 50);
+            // Find matching trade / setup data
+            let item = null;
+            let sourceLabel = '';
+
+            if (allActiveTradesData && allActiveTradesData.length > 0) {
+                item = allActiveTradesData.find(t => (t.ticker || '').split('.')[0].trim().toUpperCase() === cleanTicker);
+                if (item) sourceLabel = 'Active Trade';
+            }
+            if (!item && window.latestData && window.latestData.trades) {
+                item = window.latestData.trades.find(t => (t.ticker || '').split('.')[0].trim().toUpperCase() === cleanTicker);
+                if (item) sourceLabel = item.status === 'PENDING' ? 'Pending Setup' : 'Trade';
+            }
+            if (!item && allWatchlistData && allWatchlistData.length > 0) {
+                item = allWatchlistData.find(t => (t.ticker || '').split('.')[0].trim().toUpperCase() === cleanTicker);
+                if (item) sourceLabel = 'Watchlist';
+            }
+
+            const levelsBar = document.getElementById('tv-levels-bar');
+            const typeBadge = document.getElementById('tv-type-badge');
+            const ltpBadge = document.getElementById('tv-ltp-badge');
+
+            if (item) {
+                const dir = (item.direction || 'BUY').toUpperCase();
+                const isBuy = dir === 'BUY' || dir === 'LONG';
+                typeBadge.innerText = `${sourceLabel}: ${isBuy ? 'LONG' : 'SHORT'}`;
+                typeBadge.className = `direction-badge ${isBuy ? 'buy' : 'sell'}`;
+
+                const ltp = item.ltp || 0;
+                ltpBadge.innerHTML = ltp > 0 ? `LTP: <strong style="color:#fff;">₹${ltp.toFixed(2)}</strong>` : '';
+
+                const entry = item.entry_price || 0;
+                const sl = item.current_sl || item.initial_sl || 0;
+                const t1 = item.target1 || (entry > 0 ? (isBuy ? entry * 1.02 : entry * 0.98) : 0);
+                const t2 = item.target2 || (entry > 0 ? (isBuy ? entry * 1.04 : entry * 0.96) : 0);
+
+                let levelsHtml = '';
+                if (entry > 0) {
+                    levelsHtml += `
+                        <div style="background: rgba(59, 130, 246, 0.22); border: 1px solid rgba(59, 130, 246, 0.6); color: #60a5fa; padding: 4px 10px; border-radius: 6px; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                            🚀 Entry Level: ₹${entry.toFixed(2)}
+                        </div>
+                    `;
+                }
+                if (sl > 0) {
+                    const slDiff = entry > 0 ? (((sl - entry) / entry) * 100).toFixed(1) : '';
+                    levelsHtml += `
+                        <div style="background: rgba(244, 63, 94, 0.22); border: 1px solid rgba(244, 63, 94, 0.6); color: #f43f5e; padding: 4px 10px; border-radius: 6px; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                            🛑 Stop Loss: ₹${sl.toFixed(2)} ${slDiff ? `(${slDiff}%)` : ''}
+                        </div>
+                    `;
+                }
+                if (t1 > 0) {
+                    const t1Diff = entry > 0 ? (((t1 - entry) / entry) * 100).toFixed(1) : '';
+                    levelsHtml += `
+                        <div style="background: rgba(16, 185, 129, 0.22); border: 1px solid rgba(16, 185, 129, 0.6); color: #10b981; padding: 4px 10px; border-radius: 6px; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                            🎯 Target 1: ₹${t1.toFixed(2)} ${t1Diff ? `(+${t1Diff}%)` : ''}
+                        </div>
+                    `;
+                }
+                if (t2 > 0) {
+                    const t2Diff = entry > 0 ? (((t2 - entry) / entry) * 100).toFixed(1) : '';
+                    levelsHtml += `
+                        <div style="background: rgba(16, 185, 129, 0.32); border: 1px solid rgba(16, 185, 129, 0.8); color: #34d399; padding: 4px 10px; border-radius: 6px; font-weight: 700; display: flex; align-items: center; gap: 4px;">
+                            🎯 Target 2: ₹${t2.toFixed(2)} ${t2Diff ? `(+${t2Diff}%)` : ''}
+                        </div>
+                    `;
+                }
+                if (item.projected_loss || item.projected_profit) {
+                    levelsHtml += `
+                        <div style="margin-left: auto; font-size: 0.75rem; color: #94a3b8; display: flex; gap: 8px;">
+                            <span style="color:#f43f5e;">Max Risk: -₹${(item.projected_loss || 0).toFixed(0)}</span>
+                            <span style="color:#10b981;">Target Gain: +₹${(item.projected_profit || 0).toFixed(0)}</span>
+                        </div>
+                    `;
+                }
+                levelsBar.innerHTML = levelsHtml;
+                levelsBar.style.display = 'flex';
+            } else {
+                typeBadge.innerText = 'WATCHLIST';
+                typeBadge.className = 'direction-badge buy';
+                ltpBadge.innerText = '';
+                levelsBar.style.display = 'none';
+            }
+
+            renderTvChart(cleanTicker);
         }
 
         function closeTradingViewModal() {
