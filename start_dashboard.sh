@@ -20,5 +20,5 @@ elif [ -d "venv" ]; then
 fi
 
 # Launch integrated dashboard and scanner
-python3 dashboard_server.py --host "$HOST" --port "$PORT"
+python3 dashboard_server.py --host "$HOST" --port "$PORT" --no-browser
 

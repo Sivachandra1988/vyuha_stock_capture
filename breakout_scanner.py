@@ -8,6 +8,8 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=UserWarning)
 
 import requests
+import socket
+import threading
 from datetime import datetime, time as dt_time
 
 # Force UTF-8 output on Windows to prevent charmap codec errors with emoji characters
@@ -238,6 +240,55 @@ def is_market_open():
             
     return True, "Market Open"
 
+def get_local_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+def is_port_in_use(port, host="127.0.0.1"):
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.5)
+            return s.connect_ex((host, port)) == 0
+    except Exception:
+        return False
+
+def ensure_dashboard_server_running(port=8080, host="0.0.0.0"):
+    """Auto-starts the FastAPI web dashboard in background if not already active."""
+    if os.environ.get("NO_WEB_UI", "0") == "1":
+        return
+
+    if is_port_in_use(port, "127.0.0.1"):
+        print(f"🌐 [INFO] Web Dashboard is active on port {port}.")
+        return
+
+    try:
+        import uvicorn
+        from dashboard.server import app
+        config = uvicorn.Config(app=app, host=host, port=port, access_log=False, log_level="warning")
+        server = uvicorn.Server(config)
+        t = threading.Thread(target=server.run, daemon=True)
+        t.start()
+        
+        local_ip = get_local_ip()
+        print("=" * 70)
+        print("🌐  VYUHA TRADER-PILOT — INTEGRATED DASHBOARD & SCANNER")
+        print("=" * 70)
+        print(f"📱 Mobile Web UI:      http://localhost:{port}  (or http://127.0.0.1:{port})")
+        if local_ip != "127.0.0.1":
+            print(f"💻 Laptop / Wi-Fi URL: http://{local_ip}:{port}")
+        else:
+            print(f"💻 Laptop / Wi-Fi URL: http://<PHONE_IP>:{port}")
+        print("   (Both Web UI and Breakout Scanner are running in this same session)")
+        print("=" * 70 + "\n")
+    except Exception as e:
+        print(f"[WARN] Could not auto-start dashboard background server: {e}")
+
 def run_scanner_loop(continuous=True, daemon=False, force=False):
     try:
         print("===============================================================")
@@ -262,6 +313,10 @@ def run_scanner_loop(continuous=True, daemon=False, force=False):
                 print("[INFO] Daemon mode active. Waiting for market open...")
 
         print(f"[INFO] Engine active: {'FORCED EXECUTION' if force and not open_status else reason}")
+        
+        # Auto-launch Web Dashboard in background if not already running
+        port = int(os.environ.get("DASHBOARD_PORT", 8080))
+        ensure_dashboard_server_running(port=port)
         
         # Auto-populate if watchlist is completely empty
         if not os.path.exists(WATCHLIST_FILE) or os.path.getsize(WATCHLIST_FILE) == 0:
