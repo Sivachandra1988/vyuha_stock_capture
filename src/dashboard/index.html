@@ -1118,10 +1118,34 @@
                         </div>
                     </div>
                     <div id="watchlist-content" style="display: block;">
+                        <!-- Add Stock to Watchlist Bar -->
+                        <div style="display: flex; gap: 0.4rem; margin-bottom: 0.6rem; align-items: center; flex-wrap: wrap; background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border-color);">
+                            <input type="text" id="wl-new-ticker" placeholder="Symbol (e.g. RELIANCE)" style="background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.5rem; border-radius: 6px; font-size: 0.8rem; text-transform: uppercase; flex: 1; min-width: 120px;" onkeydown="if(event.key==='Enter') submitAddToWatchlist()">
+                            <select id="wl-new-type" style="background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.4rem; border-radius: 6px; font-size: 0.75rem;">
+                                <option value="POSITIONAL">Short Term</option>
+                                <option value="INTRADAY">Intraday</option>
+                                <option value="LONG_TERM">Long Term</option>
+                            </select>
+                            <select id="wl-new-dir" style="background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.4rem; border-radius: 6px; font-size: 0.75rem;">
+                                <option value="Long">Long / Buy</option>
+                                <option value="Short">Short / Sell</option>
+                            </select>
+                            <select id="wl-new-strat" style="background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.4rem; border-radius: 6px; font-size: 0.75rem;">
+                                <option value="Swing">Swing</option>
+                                <option value="NR7">NR7</option>
+                                <option value="UT_Bot">UT Bot</option>
+                                <option value="AdvancedTrend">Advanced Trend</option>
+                                <option value="Custom">Custom</option>
+                            </select>
+                            <button onclick="submitAddToWatchlist()" style="background: rgba(16, 185, 129, 0.25); border: 1px solid rgba(16, 185, 129, 0.5); color: #34d399; border-radius: 6px; padding: 0.3rem 0.75rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;">+ Add</button>
+                        </div>
+
                         <div
                             style="display: flex; gap: 0.5rem; margin-bottom: 0.8rem; flex-wrap: wrap; align-items: center;">
+                            <button id="tab-all-btn" onclick="showWatchlistTab('ALL')"
+                                style="background: rgba(59, 130, 246, 0.25); border: 1px solid rgba(59, 130, 246, 0.5); color: var(--text-primary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 600;">All</button>
                             <button id="tab-intraday-btn" onclick="showWatchlistTab('INTRADAY')"
-                                style="background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); color: var(--text-primary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500;">&#9889;
+                                style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500;">&#9889;
                                 Intraday</button>
                             <button id="tab-positional-btn" onclick="showWatchlistTab('POSITIONAL')"
                                 style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500;">&#128200;
@@ -1141,8 +1165,10 @@
                                 <option value="NR7">NR7</option>
                                 <option value="Swing">Swing</option>
                                 <option value="UT_Bot">UT Bot</option>
+                                <option value="AdvancedTrend">Advanced Trend</option>
                                 <option value="SMC_FVG">SMC FVG</option>
                                 <option value="AI_SMC_MC">AI SMC MC</option>
+                                <option value="Custom">Custom</option>
                             </select>
                         </div>
                         <div class="watchlist-grid" id="watchlist-container"
@@ -1168,12 +1194,70 @@
     </div>
 
     <script>
-        let currentTab = 'INTRADAY';
+        let currentTab = 'ALL';
         let currentActiveFilter = 'ALL';
         let currentStrategyFilter = 'ALL';
         let currentDirectionFilter = 'ALL';
         let allActiveTradesData = [];
+        let allPendingTradesData = [];
         let allWatchlistData = [];
+
+        async function submitAddToWatchlist() {
+            const input = document.getElementById('wl-new-ticker');
+            const ticker = (input ? input.value : '').trim().toUpperCase();
+            if (!ticker) {
+                alert('Please enter a stock ticker (e.g. RELIANCE, TATASTEEL)');
+                return;
+            }
+
+            const typeSelect = document.getElementById('wl-new-type');
+            const dirSelect = document.getElementById('wl-new-dir');
+            const stratSelect = document.getElementById('wl-new-strat');
+
+            const tradeType = typeSelect ? typeSelect.value : 'POSITIONAL';
+            const direction = dirSelect ? dirSelect.value : 'Long';
+            const strategy = stratSelect ? stratSelect.value : 'Swing';
+
+            try {
+                const res = await fetch('/api/watchlist/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ticker: ticker,
+                        trade_type: tradeType,
+                        direction: direction,
+                        strategy: strategy
+                    })
+                });
+                const result = await res.json();
+                if (result.status === 'success') {
+                    if (input) input.value = '';
+                    await fetchTrades();
+                } else {
+                    alert('Error adding stock: ' + (result.message || 'Unknown error'));
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Network error adding stock to watchlist.');
+            }
+        }
+
+        async function deleteFromWatchlist(ticker, evt) {
+            if (evt) {
+                try { evt.stopPropagation(); } catch (e) {}
+            }
+            if (!confirm(`Remove ${ticker} from watchlist?`)) return;
+
+            try {
+                const res = await fetch(`/api/watchlist/delete/${ticker}`, { method: 'POST' });
+                const result = await res.json();
+                if (result.status === 'success') {
+                    await fetchTrades();
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
 
         function filterWatchlistByStrategy(strategy) {
             currentStrategyFilter = strategy;
@@ -1245,9 +1329,11 @@
         function showWatchlistTab(tab) {
             currentTab = tab;
             const tabs = [
+                { id: 'tab-all-btn', name: 'ALL' },
                 { id: 'tab-intraday-btn', name: 'INTRADAY' },
                 { id: 'tab-positional-btn', name: 'POSITIONAL' },
                 { id: 'tab-longterm-btn', name: 'LONG_TERM' },
+                { id: 'modal-tab-all-btn', name: 'ALL' },
                 { id: 'modal-tab-intraday-btn', name: 'INTRADAY' },
                 { id: 'modal-tab-positional-btn', name: 'POSITIONAL' },
                 { id: 'modal-tab-longterm-btn', name: 'LONG_TERM' }
@@ -1256,9 +1342,10 @@
             tabs.forEach(t => {
                 const btn = document.getElementById(t.id);
                 if (btn) {
-                    btn.style.background = tab === t.name ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255, 255, 255, 0.05)';
+                    btn.style.background = tab === t.name ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.05)';
                     btn.style.color = tab === t.name ? 'var(--text-primary)' : 'var(--text-secondary)';
-                    btn.style.borderColor = tab === t.name ? 'rgba(59, 130, 246, 0.4)' : 'var(--border-color)';
+                    btn.style.borderColor = tab === t.name ? 'rgba(59, 130, 246, 0.5)' : 'var(--border-color)';
+                    btn.style.fontWeight = tab === t.name ? '600' : '500';
                 }
             });
 
@@ -1297,26 +1384,193 @@
             }
         }
 
+        function renderActiveTrades() {
+            const activeList = document.getElementById('active-trades-list');
+            if (!activeList) return;
+
+            let filteredTrades = allActiveTradesData;
+            if (currentActiveFilter !== 'ALL') {
+                if (currentActiveFilter === 'REAL') {
+                    filteredTrades = allActiveTradesData.filter(t => t.is_real_trade);
+                } else {
+                    filteredTrades = allActiveTradesData.filter(t => (t.trade_type || 'POSITIONAL').toUpperCase() === currentActiveFilter);
+                }
+            }
+
+            if (filteredTrades.length === 0) {
+                activeList.innerHTML = '<div class="no-data">No active paper positions for this filter.</div>';
+            } else {
+                activeList.innerHTML = filteredTrades.map(trade => {
+                    const direction = trade.direction;
+                    const ltp = trade.ltp || 0;
+                    const entry = trade.entry_price;
+                    const sl = trade.current_sl || trade.initial_sl;
+                    const t1 = trade.target1;
+                    const t2 = trade.target2;
+                    const pnlClass = trade.pnl >= 0 ? 'positive' : 'negative';
+
+                    // Progress Calculation
+                    let progress = 0;
+                    if (direction === 'BUY') {
+                        const totalDist = t2 - entry;
+                        if (totalDist > 0) {
+                            progress = Math.max(0, Math.min(100, ((ltp - entry) / totalDist) * 100));
+                        }
+                    } else {
+                        const totalDist = entry - t2;
+                        if (totalDist > 0) {
+                            progress = Math.max(0, Math.min(100, ((entry - ltp) / totalDist) * 100));
+                        }
+                    }
+
+                    const risk = trade.projected_loss || 0;
+                    const reward = trade.projected_profit || 0;
+
+                    let daysActiveText = '';
+                    const startDateStr = trade.entry_date || trade.setup_date;
+                    if (startDateStr) {
+                        const datePart = startDateStr.split(' ')[0];
+                        const start = new Date(datePart);
+                        const now = new Date();
+                        const diffTime = Math.abs(now - start);
+                        let diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                        if (diffDays === 0) diffDays = 1;
+                        daysActiveText = `<span class="direction-badge" style="background: rgba(255,255,255,0.1); color: var(--text-secondary); margin-left: 0.5rem;">📅 ${diffDays} Day(s)</span>`;
+                    }
+
+                    const isReal = trade.is_real_trade;
+                    const realBadge = isReal ? `<span class="direction-badge" style="background: rgba(250, 204, 21, 0.2); color: #facc15; margin-left: 0.5rem; border: 1px solid rgba(250,204,21,0.3);">⭐ Real</span>` : '';
+                    const realToggle = `<button onclick="toggleRealTrade('${trade.ticker}')" style="background: transparent; border: 1px solid ${isReal ? '#facc15' : 'var(--border-color)'}; color: ${isReal ? '#facc15' : 'var(--text-secondary)'}; border-radius: 4px; padding: 0.1rem 0.4rem; font-size: 0.7rem; cursor: pointer; margin-left: auto;">${isReal ? '⭐ Real Trade' : 'Mark Real'}</button>`;
+
+                    return `
+                    <div class="trade-card">
+                        <div class="trade-header">
+                            <div class="trade-info" style="width: 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem;">
+                                <span class="ticker-name" onclick="openTradingView('${trade.ticker}', event)" style="cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" title="Click to view TradingView Chart & Levels">
+                                    <span style="border-bottom: 2px solid var(--blue);">${trade.ticker}</span>
+                                    <span style="font-size: 0.68rem; color: #60a5fa; background: rgba(59,130,246,0.18); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(59,130,246,0.3);">📊 Chart</span>
+                                </span>
+                                <span class="direction-badge ${direction === 'BUY' ? 'buy' : 'sell'}">
+                                    ${direction === 'BUY' ? 'Long' : 'Short'}
+                                </span>
+                                ${trade.trade_type ? `<span class="direction-badge" style="background: ${trade.trade_type === 'INTRADAY' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)'}; color: ${trade.trade_type === 'INTRADAY' ? '#c084fc' : '#60a5fa'}; margin-left: 0.5rem;">${trade.trade_type === 'INTRADAY' ? 'Intraday' : 'Short Term'}</span>` : ''}
+                                ${realBadge}
+                                ${daysActiveText}
+                                <span style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 500; margin-left: 0.5rem;">Qty: ${trade.quantity}</span>
+                                ${realToggle}
+                            </div>
+                        </div>
+                        
+                        <div class="trade-details">
+                            <div class="detail-item">
+                                <span class="detail-label">Entry Price</span>
+                                <span class="detail-value">₹${entry.toFixed(2)}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Live Price (LTP)</span>
+                                <span class="detail-value">₹${ltp.toFixed(2)}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Stop Loss</span>
+                                <span class="detail-value">₹${sl.toFixed(2)}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Target 1</span>
+                                <span class="detail-value">₹${t1.toFixed(2)}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Target 2</span>
+                                <span class="detail-value">₹${t2.toFixed(2)}</span>
+                            </div>
+                        </div>
+
+                        <div class="projections-row">
+                            <span class="proj-item risk">Expt. Loss: -₹${risk.toFixed(2)}</span>
+                            <span class="proj-item reward">Expt. Profit: +₹${reward.toFixed(2)}</span>
+                        </div>
+
+                        <div style="display: flex; justify-content: space-between; font-size: 0.7rem; margin-bottom: -0.3rem;">
+                            <span class="detail-label">Target 2: ₹${t2.toFixed(2)}</span>
+                            <span class="pnl-badge ${pnlClass}" style="font-size: 0.75rem;">PnL: ${formatCurrency(trade.pnl)}</span>
+                        </div>
+                        <div class="progress-bar-container">
+                            <div class="progress-fill" style="width: ${progress}%"></div>
+                        </div>
+                    </div>
+                `;
+                }).join('');
+            }
+        }
+
+        function renderPendingTrades() {
+            const pendingListContainer = document.getElementById('pending-list');
+            if (!pendingListContainer) return;
+            if (!allPendingTradesData || allPendingTradesData.length === 0) {
+                pendingListContainer.innerHTML = '<div class="no-data">No pending triggers queued.</div>';
+                return;
+            }
+            pendingListContainer.innerHTML = allPendingTradesData.map(trade => {
+                const direction = trade.direction;
+                const isReal = trade.is_real_trade;
+                const realBadge = isReal ? `<span class="direction-badge" style="background: rgba(250, 204, 21, 0.2); color: #facc15; margin-left: 0.5rem; border: 1px solid rgba(250,204,21,0.3);">⭐ Real</span>` : '';
+                const realToggle = `<button onclick="toggleRealTrade('${trade.ticker}')" style="background: transparent; border: 1px solid ${isReal ? '#facc15' : 'var(--border-color)'}; color: ${isReal ? '#facc15' : 'var(--text-secondary)'}; border-radius: 4px; padding: 0.1rem 0.4rem; font-size: 0.7rem; cursor: pointer; margin-top: 0.3rem;">${isReal ? '⭐ Real Trade' : 'Mark Real'}</button>`;
+                return `
+                    <div class="pending-card" style="flex-direction: column; align-items: stretch; gap: 0.6rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div class="pending-left">
+                                <div class="pending-ticker" onclick="openTradingView('${trade.ticker}', event)" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px;" title="Click to view TradingView Chart & Levels">
+                                    <span style="border-bottom: 2px solid var(--blue); font-weight: 700;">${trade.ticker}</span>
+                                    <span style="font-size: 0.68rem; color: #60a5fa; background: rgba(59,130,246,0.18); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(59,130,246,0.3);">📊 Chart</span>
+                                    <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-secondary); margin-left: 0.3rem;">Qty: ${trade.quantity}</span>
+                                </div>
+                                <div class="pending-date">Setup: ${trade.setup_date} <span class="direction-badge ${direction === 'BUY' ? 'buy' : 'sell'}" style="margin-left: 0.5rem; font-size: 0.65rem;">${direction === 'BUY' ? 'Long' : 'Short'}</span>${trade.trade_type ? `<span class="direction-badge" style="margin-left: 0.5rem; font-size: 0.65rem; background: ${trade.trade_type === 'INTRADAY' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)'}; color: ${trade.trade_type === 'INTRADAY' ? '#c084fc' : '#60a5fa'};"> ${trade.trade_type === 'INTRADAY' ? 'Intraday' : 'Short Term'}</span>` : ''}${realBadge}</div>
+                            </div>
+                            <div class="pending-right" style="display: flex; flex-direction: column; align-items: flex-end;">
+                                <div class="pending-price-label">Trigger</div>
+                                <div class="pending-price">&#8377;${trade.entry_price.toFixed(2)}</div>
+                                ${trade.ltp ? `<div style="font-size:0.7rem; color:var(--text-secondary); margin-top:0.2rem;">LTP: <strong style="color:var(--text-primary)">&#8377;${trade.ltp.toFixed(2)}</strong></div>` : ''}
+                                ${realToggle}
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; background: rgba(255, 255, 255, 0.02); padding: 0.6rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.03);">
+                            <div class="detail-item">
+                                <span class="detail-label" style="font-size: 0.65rem;">Stop Loss</span>
+                                <span class="detail-value" style="font-size: 0.82rem;">&#8377;${trade.initial_sl.toFixed(2)}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label" style="font-size: 0.65rem;">Target 1</span>
+                                <span class="detail-value" style="font-size: 0.82rem;">&#8377;${trade.target1.toFixed(2)}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label" style="font-size: 0.65rem;">Target 2</span>
+                                <span class="detail-value" style="font-size: 0.82rem;">&#8377;${trade.target2.toFixed(2)}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
         function renderWatchlist() {
             const wlContainer = document.getElementById('watchlist-container');
             const modalContainer = document.getElementById('modal-watchlist-container');
 
             const filtered = allWatchlistData.filter(item => {
                 const type = (item.trade_type || 'POSITIONAL').toUpperCase();
-                const strat = item.strategy || '';
-                const dir = item.direction || 'BUY'; // Default to BUY if missing
+                const strat = (item.strategy || '').trim();
+                const dir = (item.direction || 'BUY').trim();
                 const dirNormalized = dir.toUpperCase().includes('SELL') || dir.toUpperCase().includes('SHORT') ? 'SELL' : 'BUY';
 
-                const typeMatch = type === currentTab;
-                const stratMatch = currentStrategyFilter === 'ALL' || strat === currentStrategyFilter;
+                const typeMatch = currentTab === 'ALL' || type === currentTab;
+                const stratMatch = currentStrategyFilter === 'ALL' || strat.toLowerCase().includes(currentStrategyFilter.toLowerCase());
                 const dirMatch = currentDirectionFilter === 'ALL' || dirNormalized === currentDirectionFilter;
                 return typeMatch && stratMatch && dirMatch;
             });
 
             let htmlContent = '';
             if (filtered.length === 0) {
-                let tabNameStr = currentTab === 'INTRADAY' ? 'Intraday' : (currentTab === 'LONG_TERM' ? 'Long Term' : 'Short Term');
-                htmlContent = `<div class="no-data" style="padding: 1.5rem; font-size: 0.85rem; grid-column: 1 / -1;">No ${tabNameStr} candidates today.</div>`;
+                let tabNameStr = currentTab === 'ALL' ? 'watchlist' : (currentTab === 'INTRADAY' ? 'Intraday' : (currentTab === 'LONG_TERM' ? 'Long Term' : 'Short Term'));
+                htmlContent = `<div class="no-data" style="padding: 1.5rem; font-size: 0.85rem; grid-column: 1 / -1;">No ${tabNameStr} candidates found matching filters.</div>`;
             } else {
                 htmlContent = filtered.map(t => {
                     const ticker = t.ticker;
@@ -1343,6 +1597,7 @@
                     if (strategy === 'NR7') strategyDesc = 'Volatility Contraction (NR7) Breakout';
                     if (strategy === 'Swing') strategyDesc = 'Swing Setup';
                     if (strategy === 'UT_Bot') strategyDesc = 'UT Bot Trend Following';
+                    if (strategy === 'AdvancedTrend') strategyDesc = 'Advanced Trend Momentum';
 
                     const projStr = t.projection || 'PROJ_NONE_0.0';
                     let projHtml = `<div style="font-size:0.65rem; color:var(--text-secondary); margin-top:0.2rem; display: flex; align-items: center; gap: 0.2rem;"><span>🔮</span> Proj (5D): Neutral</div>`;
@@ -1367,7 +1622,10 @@
                     return `
                         <div class="pending-card" style="padding: 0.4rem 0.6rem; cursor: pointer;" title="${tooltipText}" onclick="openTradingView('${ticker}', event)">
                             <div class="pending-left">
-                                <div class="pending-ticker" style="font-size: 0.95rem;">${ticker}</div>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <div class="pending-ticker" style="font-size: 0.95rem; font-weight: 700;">${ticker}</div>
+                                    <span style="font-size: 0.65rem; color: #60a5fa; background: rgba(59,130,246,0.15); padding: 1px 5px; border-radius: 4px;">📊 Chart</span>
+                                </div>
                                 <div style="display:flex; gap:0.3rem; align-items:center; margin-top:0.2rem;">
                                     <span style="font-size:0.6rem; background:${typeBg}; color:${typeColor}; padding:0.1rem 0.35rem; border-radius:4px; font-weight:600;">${typeName}</span>
                                     <span style="font-size:0.6rem; color:var(--text-secondary);">${strategy}</span>
@@ -1375,7 +1633,10 @@
                                 ${projHtml}
                             </div>
                             <div class="pending-right" style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.2rem;">
-                                <span style="font-size: 0.9rem; font-weight: 500; color: var(--text-primary);">&#8377;${ltp.toFixed(2)}</span>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="font-size: 0.9rem; font-weight: 600; color: var(--text-primary);">&#8377;${ltp.toFixed(2)}</span>
+                                    <button onclick="deleteFromWatchlist('${ticker}', event)" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; padding: 0 4px; font-size: 0.9rem; border-radius: 4px; line-height: 1;" title="Delete ${ticker} from Watchlist" onmouseover="this.style.color='#f43f5e'" onmouseout="this.style.color='var(--text-secondary)'">✕</button>
+                                </div>
                                 <span class="direction-badge ${badgeClass}" style="font-size: 0.65rem;">${trendLabel}</span>
                                 ${entryPriceHtml}
                             </div>
@@ -1525,176 +1786,13 @@
                 mobPending.innerText = '';
             }
 
-            function renderActiveTrades() {
-                const activeList = document.getElementById('active-trades-list');
-
-                let filteredTrades = allActiveTradesData;
-                if (currentActiveFilter !== 'ALL') {
-                    if (currentActiveFilter === 'REAL') {
-                        filteredTrades = allActiveTradesData.filter(t => t.is_real_trade);
-                    } else {
-                        filteredTrades = allActiveTradesData.filter(t => (t.trade_type || 'POSITIONAL').toUpperCase() === currentActiveFilter);
-                    }
-                }
-
-                if (filteredTrades.length === 0) {
-                    activeList.innerHTML = '<div class="no-data">No active paper positions for this filter.</div>';
-                } else {
-                    activeList.innerHTML = filteredTrades.map(trade => {
-                        const direction = trade.direction;
-                        const ltp = trade.ltp || 0;
-                        const entry = trade.entry_price;
-                        const sl = trade.current_sl || trade.initial_sl;
-                        const t1 = trade.target1;
-                        const t2 = trade.target2;
-                        const pnlClass = trade.pnl >= 0 ? 'positive' : 'negative';
-
-                        // Progress Calculation
-                        let progress = 0;
-                        if (direction === 'BUY') {
-                            const totalDist = t2 - entry;
-                            if (totalDist > 0) {
-                                progress = Math.max(0, Math.min(100, ((ltp - entry) / totalDist) * 100));
-                            }
-                        } else {
-                            const totalDist = entry - t2;
-                            if (totalDist > 0) {
-                                progress = Math.max(0, Math.min(100, ((entry - ltp) / totalDist) * 100));
-                            }
-                        }
-
-                        const risk = trade.projected_loss || 0;
-                        const reward = trade.projected_profit || 0;
-
-                        let daysActiveText = '';
-                        const startDateStr = trade.entry_date || trade.setup_date;
-                        if (startDateStr) {
-                            // Extract just the date part if it's a datetime string
-                            const datePart = startDateStr.split(' ')[0];
-                            const start = new Date(datePart);
-                            const now = new Date();
-                            const diffTime = Math.abs(now - start);
-                            let diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                            if (diffDays === 0) diffDays = 1; // Count today as day 1
-                            daysActiveText = `<span class="direction-badge" style="background: rgba(255,255,255,0.1); color: var(--text-secondary); margin-left: 0.5rem;">📅 ${diffDays} Day(s)</span>`;
-                        }
-
-                        const isReal = trade.is_real_trade;
-                        const realBadge = isReal ? `<span class="direction-badge" style="background: rgba(250, 204, 21, 0.2); color: #facc15; margin-left: 0.5rem; border: 1px solid rgba(250,204,21,0.3);">⭐ Real</span>` : '';
-                        const realToggle = `<button onclick="toggleRealTrade('${trade.ticker}')" style="background: transparent; border: 1px solid ${isReal ? '#facc15' : 'var(--border-color)'}; color: ${isReal ? '#facc15' : 'var(--text-secondary)'}; border-radius: 4px; padding: 0.1rem 0.4rem; font-size: 0.7rem; cursor: pointer; margin-left: auto;">${isReal ? '⭐ Real Trade' : 'Mark Real'}</button>`;
-
-                        return `
-                        <div class="trade-card">
-                            <div class="trade-header">
-                                <div class="trade-info" style="width: 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem;">
-                                    <span class="ticker-name" onclick="openTradingView('${trade.ticker}', event)" style="cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" title="Click to view TradingView Chart & Levels">
-                                        <span style="border-bottom: 2px solid var(--blue);">${trade.ticker}</span>
-                                        <span style="font-size: 0.68rem; color: #60a5fa; background: rgba(59,130,246,0.18); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(59,130,246,0.3);">📊 Chart</span>
-                                    </span>
-                                    <span class="direction-badge ${direction === 'BUY' ? 'buy' : 'sell'}">
-                                        ${direction === 'BUY' ? 'Long' : 'Short'}
-                                    </span>
-                                    ${trade.trade_type ? `<span class="direction-badge" style="background: ${trade.trade_type === 'INTRADAY' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)'}; color: ${trade.trade_type === 'INTRADAY' ? '#c084fc' : '#60a5fa'}; margin-left: 0.5rem;">${trade.trade_type === 'INTRADAY' ? 'Intraday' : 'Short Term'}</span>` : ''}
-                                    ${realBadge}
-                                    ${daysActiveText}
-                                    <span style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 500; margin-left: 0.5rem;">Qty: ${trade.quantity}</span>
-                                    ${realToggle}
-                                </div>
-                            </div>
-                            
-                            <div class="trade-details">
-                                <div class="detail-item">
-                                    <span class="detail-label">Entry Price</span>
-                                    <span class="detail-value">₹${entry.toFixed(2)}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">Live Price (LTP)</span>
-                                    <span class="detail-value">₹${ltp.toFixed(2)}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">Stop Loss</span>
-                                    <span class="detail-value">₹${sl.toFixed(2)}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">Target 1</span>
-                                    <span class="detail-value">₹${t1.toFixed(2)}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">Target 2</span>
-                                    <span class="detail-value">₹${t2.toFixed(2)}</span>
-                                </div>
-                            </div>
-
-                            <div class="projections-row">
-                                <span class="proj-item risk">Expt. Loss: -₹${risk.toFixed(2)}</span>
-                                <span class="proj-item reward">Expt. Profit: +₹${reward.toFixed(2)}</span>
-                            </div>
-
-                            <div style="display: flex; justify-content: space-between; font-size: 0.7rem; margin-bottom: -0.3rem;">
-                                <span class="detail-label">Target 2: ₹${t2.toFixed(2)}</span>
-                                <span class="pnl-badge ${pnlClass}" style="font-size: 0.75rem;">PnL: ${formatCurrency(trade.pnl)}</span>
-                            </div>
-                            <div class="progress-bar-container">
-                                <div class="progress-fill" style="width: ${progress}%"></div>
-                            </div>
-                        </div>
-                    `;
-                    }).join('');
-                }
-            }
-
             // Populate Active Positions
             allActiveTradesData = trades.filter(t => t.status === 'ACTIVE' || t.status === 'PARTIAL_EXIT');
             renderActiveTrades();
 
             // Populate Pending Setups
-            const pendingListContainer = document.getElementById('pending-list');
-            const pendingTrades = trades.filter(t => t.status === 'PENDING');
-
-            if (pendingTrades.length === 0) {
-                pendingListContainer.innerHTML = '<div class="no-data">No pending triggers queued.</div>';
-            } else {
-                pendingListContainer.innerHTML = pendingTrades.map(trade => {
-                    const direction = trade.direction;
-                    const isReal = trade.is_real_trade;
-                    const realBadge = isReal ? `<span class="direction-badge" style="background: rgba(250, 204, 21, 0.2); color: #facc15; margin-left: 0.5rem; border: 1px solid rgba(250,204,21,0.3);">⭐ Real</span>` : '';
-                    const realToggle = `<button onclick="toggleRealTrade('${trade.ticker}')" style="background: transparent; border: 1px solid ${isReal ? '#facc15' : 'var(--border-color)'}; color: ${isReal ? '#facc15' : 'var(--text-secondary)'}; border-radius: 4px; padding: 0.1rem 0.4rem; font-size: 0.7rem; cursor: pointer; margin-top: 0.3rem;">${isReal ? '⭐ Real Trade' : 'Mark Real'}</button>`;
-                    return `
-                        <div class="pending-card" style="flex-direction: column; align-items: stretch; gap: 0.6rem;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div class="pending-left">
-                                    <div class="pending-ticker" onclick="openTradingView('${trade.ticker}', event)" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px;" title="Click to view TradingView Chart & Levels">
-                                        <span style="border-bottom: 2px solid var(--blue); font-weight: 700;">${trade.ticker}</span>
-                                        <span style="font-size: 0.68rem; color: #60a5fa; background: rgba(59,130,246,0.18); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(59,130,246,0.3);">📊 Chart</span>
-                                        <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-secondary); margin-left: 0.3rem;">Qty: ${trade.quantity}</span>
-                                    </div>
-                                    <div class="pending-date">Setup: ${trade.setup_date} <span class="direction-badge ${direction === 'BUY' ? 'buy' : 'sell'}" style="margin-left: 0.5rem; font-size: 0.65rem;">${direction === 'BUY' ? 'Long' : 'Short'}</span>${trade.trade_type ? `<span class="direction-badge" style="margin-left: 0.5rem; font-size: 0.65rem; background: ${trade.trade_type === 'INTRADAY' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)'}; color: ${trade.trade_type === 'INTRADAY' ? '#c084fc' : '#60a5fa'};"> ${trade.trade_type === 'INTRADAY' ? 'Intraday' : 'Short Term'}</span>` : ''}${realBadge}</div>
-                                </div>
-                                <div class="pending-right" style="display: flex; flex-direction: column; align-items: flex-end;">
-                                    <div class="pending-price-label">Trigger</div>
-                                    <div class="pending-price">&#8377;${trade.entry_price.toFixed(2)}</div>
-                                    ${trade.ltp ? `<div style="font-size:0.7rem; color:var(--text-secondary); margin-top:0.2rem;">LTP: <strong style="color:var(--text-primary)">&#8377;${trade.ltp.toFixed(2)}</strong></div>` : ''}
-                                    ${realToggle}
-                                </div>
-                            </div>
-                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; background: rgba(255, 255, 255, 0.02); padding: 0.6rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.03);">
-                                <div class="detail-item">
-                                    <span class="detail-label" style="font-size: 0.65rem;">Stop Loss</span>
-                                    <span class="detail-value" style="font-size: 0.82rem;">&#8377;${trade.initial_sl.toFixed(2)}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <span class="detail-label" style="font-size: 0.65rem;">Target 1</span>
-                                    <span class="detail-value" style="font-size: 0.82rem;">&#8377;${trade.target1.toFixed(2)}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <span class="detail-label" style="font-size: 0.65rem;">Target 2</span>
-                                    <span class="detail-value" style="font-size: 0.82rem;">&#8377;${trade.target2.toFixed(2)}</span>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-            }
+            allPendingTradesData = trades.filter(t => t.status === 'PENDING');
+            renderPendingTrades();
         }
 
         // ── Trade History Modal ────────────────────────────────────────────
@@ -1854,8 +1952,10 @@
             </div>
             <div style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
                 <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+                    <button id="modal-tab-all-btn" onclick="showWatchlistTab('ALL')"
+                        style="background: rgba(59, 130, 246, 0.25); border: 1px solid rgba(59, 130, 246, 0.5); color: var(--text-primary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 600;">All</button>
                     <button id="modal-tab-intraday-btn" onclick="showWatchlistTab('INTRADAY')"
-                        style="background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); color: var(--text-primary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500;">&#9889;
+                        style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500;">&#9889;
                         Intraday</button>
                     <button id="modal-tab-positional-btn" onclick="showWatchlistTab('POSITIONAL')"
                         style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500;">&#128200;
@@ -1875,8 +1975,10 @@
                         <option value="NR7">NR7</option>
                         <option value="Swing">Swing</option>
                         <option value="UT_Bot">UT Bot</option>
+                        <option value="AdvancedTrend">Advanced Trend</option>
                         <option value="SMC_FVG">SMC FVG</option>
                         <option value="AI_SMC_MC">AI SMC MC</option>
+                        <option value="Custom">Custom</option>
                     </select>
                 </div>
             </div>

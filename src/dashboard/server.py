@@ -432,6 +432,46 @@ def toggle_real_trade(ticker: str):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+from pydantic import BaseModel
+from typing import Optional
+
+class WatchlistAddRequest(BaseModel):
+    ticker: str
+    strategy: Optional[str] = "Swing"
+    direction: Optional[str] = "Long"
+    trade_type: Optional[str] = "POSITIONAL"
+    entry_price: Optional[float] = None
+
+@app.post("/api/watchlist/add")
+def add_to_watchlist(req: WatchlistAddRequest):
+    ticker = req.ticker.strip().upper().replace(".NS", "").replace(".BO", "")
+    if not ticker:
+        return {"status": "error", "message": "Ticker symbol cannot be empty"}
+    
+    strategy = (req.strategy or "Swing").strip()
+    direction = (req.direction or "Long").strip()
+    trade_type = (req.trade_type or "POSITIONAL").strip().upper()
+    
+    entry_str = f"{ticker} | {strategy} | {direction} | {trade_type}"
+    if req.entry_price is not None and req.entry_price > 0:
+        entry_str += f" | {req.entry_price}"
+    
+    try:
+        db_storage.append_to_watchlist(entry_str)
+        return {"status": "success", "ticker": ticker, "entry": entry_str}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.delete("/api/watchlist/{ticker}")
+@app.post("/api/watchlist/delete/{ticker}")
+def delete_from_watchlist(ticker: str):
+    clean_ticker = ticker.strip().upper().replace(".NS", "").replace(".BO", "")
+    try:
+        db_storage.remove_from_watchlist(clean_ticker)
+        return {"status": "success", "deleted": clean_ticker}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 import socket
 import argparse
 
