@@ -1,5 +1,11 @@
 import os
 import sys
+import time
+
+# Set Indian Standard Time (IST) on POSIX/Linux platforms
+if hasattr(time, "tzset"):
+    os.environ.setdefault("TZ", "Asia/Kolkata")
+    time.tzset()
 
 # Force UTF-8 encoding
 if hasattr(sys.stdout, "reconfigure") and sys.stdout.encoding != "utf-8":

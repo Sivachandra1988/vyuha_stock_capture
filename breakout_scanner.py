@@ -18,6 +18,11 @@ if sys.stdout.encoding != "utf-8":
 if sys.stderr.encoding != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8")
 
+# Set Indian Standard Time (IST) on POSIX/Linux platforms
+if hasattr(time, "tzset"):
+    os.environ.setdefault("TZ", "Asia/Kolkata")
+    time.tzset()
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.join(BASE_DIR, "src")
 if SRC_DIR not in sys.path:
