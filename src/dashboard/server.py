@@ -55,9 +55,13 @@ def start_scanner_background_thread():
         sys.path.append(BASE_DIR)
     try:
         import breakout_scanner
-        thread = threading.Thread(target=breakout_scanner.run_scanner_loop, daemon=True)
+        thread = threading.Thread(
+            target=breakout_scanner.run_scanner_loop,
+            kwargs={"continuous": True, "daemon": True},
+            daemon=True
+        )
         thread.start()
-        print("[INFO] Scanner engine background thread started successfully.")
+        print("[INFO] Scanner engine background thread started successfully in 24/7 daemon mode.")
     except Exception as e:
         print(f"[ERROR] Failed to start scanner engine thread: {e}")
 

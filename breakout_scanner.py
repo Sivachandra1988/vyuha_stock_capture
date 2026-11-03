@@ -153,6 +153,23 @@ def execute_scan_cycle():
     pt = trades.load_paper_trades()
     active_tickers = set([t["ticker"] for t in pt if t["status"] in ["ACTIVE", "PARTIAL_EXIT"]])
 
+    # Fetch live quotes to validate prices across all watchlist strategies
+    live_quotes = {}
+    if angelone.is_authenticated and tickers:
+        try:
+            live_quotes = angelone.get_live_ohlc(tickers)
+        except Exception:
+            pass
+    if not live_quotes and tickers:
+        try:
+            from dashboard.server import bulk_yfinance_prices
+            yf_prices = bulk_yfinance_prices(tickers)
+            for t, p in yf_prices.items():
+                if p > 0:
+                    live_quotes[t] = {"last_price": p}
+        except Exception:
+            pass
+
     triggered_candidates = []
     for ticker in tickers:
         if ticker in active_tickers:
@@ -164,8 +181,35 @@ def execute_scan_cycle():
         parts = [p.strip() for p in line.split('|')]
         strategy = parts[1].lower() if len(parts) > 1 else ""
         
-        # If this is a swing or manual strategy not meant for NR7 scanning, just keep it.
+        # Check swing / breakout / smc / ai recommendations for SL breach or target expiration
         if strategy == "swing" or "breakout" in strategy or "smc" in strategy or "ai" in strategy:
+            entry_price = None
+            if len(parts) > 4 and parts[4]:
+                try:
+                    entry_price = float(parts[4])
+                except ValueError:
+                    pass
+            
+            direction_str = parts[2].upper() if len(parts) > 2 else "BUY"
+            
+            if entry_price and entry_price > 0 and ticker in live_quotes:
+                curr_ltp = live_quotes[ticker].get("last_price", 0.0)
+                if curr_ltp > 0:
+                    pct_move = ((curr_ltp - entry_price) / entry_price) * 100.0
+                    
+                    # For Longs: prune if price collapsed > 4.5% below entry (SL breach) or exceeded 15% (expired)
+                    if direction_str in ["BUY", "LONG", "B/O CALL"]:
+                        if pct_move < -4.5 or pct_move > 15.0:
+                            remove_list.append(ticker)
+                            print(f"Purging outdated {strategy} recommendation: {ticker} (Move: {pct_move:+.1f}%)")
+                            continue
+                    # For Shorts: prune if price rose > 2.5% above entry (SL breach) or dropped > 15% (expired)
+                    elif direction_str in ["SELL", "SHORT"]:
+                        if pct_move > 2.5 or pct_move < -15.0:
+                            remove_list.append(ticker)
+                            print(f"Purging outdated {strategy} recommendation: {ticker} (Move: {pct_move:+.1f}%)")
+                            continue
+
             keep_list.append(ticker)
             continue
             
