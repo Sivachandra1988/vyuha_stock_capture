@@ -331,6 +331,22 @@ def execute_advanced_trend_scan(send_telegram_fn, market_trend="NEUTRAL"):
                 "setup_date": c["setup_date"],
                 "trade_type": "INTRADAY"
             })
+
+            try:
+                import db_storage
+                db_storage.record_daily_recommendation(
+                    ticker=ticker,
+                    strategy="AdvancedTrend",
+                    direction=c["direction"],
+                    trade_type="INTRADAY",
+                    entry=c["entry"],
+                    sl=c["sl"],
+                    target1=c["target1"],
+                    target2=c["target2"],
+                    reason="15m Cloud & Momentum"
+                )
+            except Exception:
+                pass
             
             dir_label = "B/O Call" if c["direction"] in ["BUY", "LONG", "Long"] else "Short"
             new_line = f"{ticker} | AdvancedTrend | {dir_label} | INTRADAY | {c['entry']:.2f}\n"

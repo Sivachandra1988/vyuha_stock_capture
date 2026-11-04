@@ -10,6 +10,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 WATCHLIST_FILE = os.path.join(DATA_DIR, "watchlist.txt")
 PAPER_TRADES_FILE = os.path.join(DATA_DIR, "paper_trades.json")
 PNL_LOG_FILE = os.path.join(DATA_DIR, "pnl_log.csv")
+DAILY_RECOMMENDATIONS_FILE = os.path.join(DATA_DIR, "daily_recommendations.json")
 
 # MongoDB collections (if MongoDB is available and running)
 watch_coll = db['watchlist'] if db is not None else None
@@ -155,3 +156,65 @@ def get_pnl_log():
             return list(reader)
     except Exception:
         return []
+
+def record_daily_recommendation(ticker, strategy, direction, trade_type, entry, sl=0.0, target1=0.0, target2=0.0, reason="", date_str=None):
+    """Records a fresh recommendation into today's daily recommendations list."""
+    today_str = date_str or datetime.datetime.now().strftime("%Y-%m-%d")
+    now_time = datetime.datetime.now().strftime("%H:%M:%S")
+    data = {"date": today_str, "items": []}
+
+    if os.path.exists(DAILY_RECOMMENDATIONS_FILE):
+        try:
+            with open(DAILY_RECOMMENDATIONS_FILE, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+                if loaded.get("date") == today_str:
+                    data = loaded
+        except Exception:
+            pass
+
+    # Check if already in today's items
+    existing_idx = None
+    for idx, item in enumerate(data.get("items", [])):
+        if item.get("ticker") == ticker:
+            existing_idx = idx
+            break
+
+    item_obj = {
+        "ticker": ticker,
+        "strategy": strategy,
+        "direction": direction,
+        "trade_type": trade_type,
+        "entry_price": float(entry) if entry else 0.0,
+        "sl": float(sl) if sl else 0.0,
+        "target1": float(target1) if target1 else 0.0,
+        "target2": float(target2) if target2 else 0.0,
+        "reason": reason,
+        "time": now_time,
+        "date": today_str
+    }
+
+    if existing_idx is not None:
+        data["items"][existing_idx] = item_obj
+    else:
+        data["items"].append(item_obj)
+
+    try:
+        with open(DAILY_RECOMMENDATIONS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        print(f"Error saving daily recommendations: {e}")
+
+def get_today_recommendations():
+    """Returns today's fresh recommendations list."""
+    today_str = datetime.datetime.now().strftime("%Y-%m-%d")
+    if not os.path.exists(DAILY_RECOMMENDATIONS_FILE):
+        return []
+    try:
+        with open(DAILY_RECOMMENDATIONS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if data.get("date") == today_str:
+                return data.get("items", [])
+    except Exception:
+        pass
+    return []
+

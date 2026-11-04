@@ -362,6 +362,22 @@ def execute_swing_scan(send_telegram_fn, force_full=False, market_trend="NEUTRAL
                 "setup_date": c["setup_date"],
                 "trade_type": c.get("trade_type", "INTRADAY")
             })
+
+            try:
+                import db_storage
+                db_storage.record_daily_recommendation(
+                    ticker=ticker,
+                    strategy="Swing",
+                    direction=c["direction"],
+                    trade_type=c.get("trade_type", "POSITIONAL"),
+                    entry=c["entry"],
+                    sl=c["sl"],
+                    target1=c["target1"],
+                    target2=c["target2"],
+                    reason=c.get("status", "Confluence Breakout")
+                )
+            except Exception:
+                pass
             
             dir_label = "B/O Call" if c["direction"] in ["BUY", "LONG", "Long"] else "Short"
             new_line = f"{ticker} | Swing | {dir_label} | {c.get('trade_type', 'INTRADAY')} | {c['entry']:.2f}\n"

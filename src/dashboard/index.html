@@ -1145,6 +1145,9 @@
                             style="display: flex; gap: 0.5rem; margin-bottom: 0.8rem; flex-wrap: wrap; align-items: center;">
                             <button id="tab-all-btn" onclick="showWatchlistTab('ALL')"
                                 style="background: rgba(59, 130, 246, 0.25); border: 1px solid rgba(59, 130, 246, 0.5); color: var(--text-primary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 600;">All</button>
+                            <button id="tab-new-btn" onclick="showWatchlistTab('NEW')"
+                                style="background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.4); color: #facc15; border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500;">&#10024;
+                                New (Today)</button>
                             <button id="tab-intraday-btn" onclick="showWatchlistTab('INTRADAY')"
                                 style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500;">&#9889;
                                 Intraday</button>
@@ -1355,10 +1358,12 @@
             currentTab = tab;
             const tabs = [
                 { id: 'tab-all-btn', name: 'ALL' },
+                { id: 'tab-new-btn', name: 'NEW' },
                 { id: 'tab-intraday-btn', name: 'INTRADAY' },
                 { id: 'tab-positional-btn', name: 'POSITIONAL' },
                 { id: 'tab-longterm-btn', name: 'LONG_TERM' },
                 { id: 'modal-tab-all-btn', name: 'ALL' },
+                { id: 'modal-tab-new-btn', name: 'NEW' },
                 { id: 'modal-tab-intraday-btn', name: 'INTRADAY' },
                 { id: 'modal-tab-positional-btn', name: 'POSITIONAL' },
                 { id: 'modal-tab-longterm-btn', name: 'LONG_TERM' }
@@ -1367,10 +1372,18 @@
             tabs.forEach(t => {
                 const btn = document.getElementById(t.id);
                 if (btn) {
-                    btn.style.background = tab === t.name ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.05)';
-                    btn.style.color = tab === t.name ? 'var(--text-primary)' : 'var(--text-secondary)';
-                    btn.style.borderColor = tab === t.name ? 'rgba(59, 130, 246, 0.5)' : 'var(--border-color)';
-                    btn.style.fontWeight = tab === t.name ? '600' : '500';
+                    const isNewTab = t.name === 'NEW';
+                    if (tab === t.name) {
+                        btn.style.background = isNewTab ? 'rgba(234, 179, 8, 0.3)' : 'rgba(59, 130, 246, 0.25)';
+                        btn.style.color = isNewTab ? '#fde047' : 'var(--text-primary)';
+                        btn.style.borderColor = isNewTab ? 'rgba(234, 179, 8, 0.7)' : 'rgba(59, 130, 246, 0.5)';
+                        btn.style.fontWeight = '600';
+                    } else {
+                        btn.style.background = isNewTab ? 'rgba(234, 179, 8, 0.08)' : 'rgba(255, 255, 255, 0.05)';
+                        btn.style.color = isNewTab ? '#facc15' : 'var(--text-secondary)';
+                        btn.style.borderColor = isNewTab ? 'rgba(234, 179, 8, 0.3)' : 'var(--border-color)';
+                        btn.style.fontWeight = '500';
+                    }
                 }
             });
 
@@ -1586,7 +1599,15 @@
                 const dir = (item.direction || 'BUY').trim();
                 const dirNormalized = dir.toUpperCase().includes('SELL') || dir.toUpperCase().includes('SHORT') ? 'SELL' : 'BUY';
 
-                const typeMatch = currentTab === 'ALL' || type === currentTab;
+                let typeMatch = false;
+                if (currentTab === 'ALL') {
+                    typeMatch = true;
+                } else if (currentTab === 'NEW') {
+                    typeMatch = item.is_new === true;
+                } else {
+                    typeMatch = type === currentTab;
+                }
+
                 const stratMatch = currentStrategyFilter === 'ALL' || strat.toLowerCase().includes(currentStrategyFilter.toLowerCase());
                 const dirMatch = currentDirectionFilter === 'ALL' || dirNormalized === currentDirectionFilter;
                 return typeMatch && stratMatch && dirMatch;
@@ -1594,7 +1615,7 @@
 
             let htmlContent = '';
             if (filtered.length === 0) {
-                let tabNameStr = currentTab === 'ALL' ? 'watchlist' : (currentTab === 'INTRADAY' ? 'Intraday' : (currentTab === 'LONG_TERM' ? 'Long Term' : 'Short Term'));
+                let tabNameStr = currentTab === 'ALL' ? 'watchlist' : (currentTab === 'NEW' ? 'New (Today)' : (currentTab === 'INTRADAY' ? 'Intraday' : (currentTab === 'LONG_TERM' ? 'Long Term' : 'Short Term')));
                 htmlContent = `<div class="no-data" style="padding: 1.5rem; font-size: 0.85rem; grid-column: 1 / -1;">No ${tabNameStr} candidates found matching filters.</div>`;
             } else {
                 htmlContent = filtered.map(t => {
@@ -1617,6 +1638,8 @@
                         typeBg = 'rgba(250,204,21,0.15)';
                         typeName = 'Long Term';
                     }
+
+                    const newBadgeHtml = t.is_new ? `<span style="font-size:0.6rem; background:rgba(234,179,8,0.2); color:#facc15; border:1px solid rgba(234,179,8,0.5); padding:0.05rem 0.35rem; border-radius:4px; font-weight:700;">✨ NEW</span>` : '';
 
                     let strategyDesc = strategy;
                     if (strategy === 'NR7') strategyDesc = 'Volatility Contraction (NR7) Breakout';
@@ -1649,6 +1672,7 @@
                             <div class="pending-left">
                                 <div style="display: flex; align-items: center; gap: 6px;">
                                     <div class="pending-ticker" style="font-size: 0.95rem; font-weight: 700;">${ticker}</div>
+                                    ${newBadgeHtml}
                                     <span style="font-size: 0.65rem; color: #60a5fa; background: rgba(59,130,246,0.15); padding: 1px 5px; border-radius: 4px;">📊 Chart</span>
                                 </div>
                                 <div style="display:flex; gap:0.3rem; align-items:center; margin-top:0.2rem;">
@@ -2016,6 +2040,9 @@
                 <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
                     <button id="modal-tab-all-btn" onclick="showWatchlistTab('ALL')"
                         style="background: rgba(59, 130, 246, 0.25); border: 1px solid rgba(59, 130, 246, 0.5); color: var(--text-primary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 600;">All</button>
+                    <button id="modal-tab-new-btn" onclick="showWatchlistTab('NEW')"
+                        style="background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.4); color: #facc15; border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500;">&#10024;
+                        New (Today)</button>
                     <button id="modal-tab-intraday-btn" onclick="showWatchlistTab('INTRADAY')"
                         style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500;">&#9889;
                         Intraday</button>

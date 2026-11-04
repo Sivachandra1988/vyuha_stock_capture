@@ -460,17 +460,29 @@ def get_trades(view: str = Query("auto")):
 
         updated_trades.append(trade)
 
-    # Attach LTP to watchlist items
+    # Attach LTP and New/Today categorization to watchlist items
     watchlist_objects = []
+    today_recs = db_storage.get_today_recommendations()
+    today_tickers = set(item["ticker"] for item in today_recs)
+    today_map = {item["ticker"]: item for item in today_recs}
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    seen_tickers = set()
+
     for wl_item in watchlist:
         parts = wl_item.split('|')
         if len(parts) > 0:
             ticker = parts[0].strip()
+            if not ticker or ticker in seen_tickers:
+                continue
+            seen_tickers.add(ticker)
+
             strategy = parts[1].strip() if len(parts) > 1 else ""
             direction = parts[2].strip() if len(parts) > 2 else ""
             trade_type = parts[3].strip() if len(parts) > 3 else "POSITIONAL"
             entry_price_str = parts[4].strip() if len(parts) > 4 else ""
             proj_str = parts[5].strip() if len(parts) > 5 else "PROJ_NONE_0.0"
+            date_str = parts[9].strip() if len(parts) > 9 else ""
 
             entry_price_val = None
             if entry_price_str:
@@ -482,14 +494,38 @@ def get_trades(view: str = Query("auto")):
             quote = live_quotes.get(ticker) or _QUOTE_CACHE.get(ticker)
             wl_ltp = quote["last_price"] if quote else (entry_price_val or 0.0)
 
+            rec_info = today_map.get(ticker, {})
+            is_new = (ticker in today_tickers) or (date_str == today_str)
+
             watchlist_objects.append({
                 "ticker": ticker,
-                "strategy": strategy,
-                "direction": direction,
-                "trade_type": trade_type,
+                "strategy": strategy or rec_info.get("strategy", ""),
+                "direction": direction or rec_info.get("direction", ""),
+                "trade_type": trade_type or rec_info.get("trade_type", "POSITIONAL"),
                 "ltp": wl_ltp,
-                "entry_price": entry_price_val,
-                "projection": proj_str
+                "entry_price": entry_price_val if entry_price_val is not None else rec_info.get("entry_price"),
+                "projection": proj_str,
+                "is_new": is_new,
+                "added_date": today_str if is_new else (date_str or "Earlier")
+            })
+
+    # Ensure any fresh daily recommendations are surfaced in the watchlist
+    for rec in today_recs:
+        t_rec = rec.get("ticker")
+        if t_rec and t_rec not in seen_tickers:
+            seen_tickers.add(t_rec)
+            quote = live_quotes.get(t_rec) or _QUOTE_CACHE.get(t_rec)
+            wl_ltp = quote["last_price"] if quote else rec.get("entry_price", 0.0)
+            watchlist_objects.insert(0, {
+                "ticker": t_rec,
+                "strategy": rec.get("strategy", "Swing"),
+                "direction": rec.get("direction", "BUY"),
+                "trade_type": rec.get("trade_type", "POSITIONAL"),
+                "ltp": wl_ltp,
+                "entry_price": rec.get("entry_price", 0.0),
+                "projection": "PROJ_NONE_0.0",
+                "is_new": True,
+                "added_date": today_str
             })
 
     return {
@@ -623,6 +659,14 @@ def add_to_watchlist(req: WatchlistAddRequest):
     
     try:
         db_storage.append_to_watchlist(entry_str)
+        db_storage.record_daily_recommendation(
+            ticker=ticker,
+            strategy=strategy,
+            direction=direction,
+            trade_type=trade_type,
+            entry=req.entry_price or 0.0,
+            reason="Manual Addition"
+        )
         return {"status": "success", "ticker": ticker, "entry": entry_str}
     except Exception as e:
         return {"status": "error", "message": str(e)}
