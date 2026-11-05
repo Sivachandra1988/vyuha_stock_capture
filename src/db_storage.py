@@ -91,26 +91,42 @@ def remove_from_watchlist(ticker):
         f.write("\n".join(lines) + ("\n" if lines else ""))
 
 def get_paper_trades():
+    trades = []
     if paper_coll is not None:
-        return list(paper_coll.find({}, {'_id': False}))
+        try:
+            trades = list(paper_coll.find({}, {'_id': False}))
+        except Exception:
+            trades = []
 
-    if not os.path.exists(PAPER_TRADES_FILE):
-        return []
-    try:
-        with open(PAPER_TRADES_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return []
+    if not trades and os.path.exists(PAPER_TRADES_FILE):
+        try:
+            with open(PAPER_TRADES_FILE, "r", encoding="utf-8") as f:
+                trades = json.load(f)
+        except Exception:
+            trades = []
+    return trades
 
 def save_paper_trades(trades):
-    if paper_coll is not None:
-        paper_coll.delete_many({})
-        if trades:
-            paper_coll.insert_many(trades)
-        return
+    # Create clean copies without MongoDB _id for JSON serialization
+    clean_trades = []
+    for t in trades:
+        t_copy = dict(t)
+        t_copy.pop('_id', None)
+        clean_trades.append(t_copy)
 
-    with open(PAPER_TRADES_FILE, "w", encoding="utf-8") as f:
-        json.dump(trades, f, indent=4)
+    if paper_coll is not None:
+        try:
+            paper_coll.delete_many({})
+            if clean_trades:
+                paper_coll.insert_many([dict(t) for t in clean_trades])
+        except Exception as e:
+            print(f"Error syncing paper trades to MongoDB: {e}")
+
+    try:
+        with open(PAPER_TRADES_FILE, "w", encoding="utf-8") as f:
+            json.dump(clean_trades, f, indent=4)
+    except Exception as e:
+        print(f"Error saving paper trades to file: {e}")
 
 def log_closed_trade(ticker, direction, entry, sl, target1, target2, exit_price, pnl, result, reason, duration_days, trade_type="POSITIONAL", strategy="NR7"):
     date_str = datetime.datetime.now().strftime("%Y-%m-%d")

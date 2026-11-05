@@ -1,5 +1,23 @@
 [
     {
+        "ticker": "TATACONSUM",
+        "direction": "BUY",
+        "status": "ACTIVE",
+        "entry_price": 1066.9,
+        "initial_sl": 1018.03,
+        "current_sl": 1018.03,
+        "target1": 1164.64,
+        "target2": 1213.51,
+        "quantity": 20,
+        "setup_date": "2026-11-04",
+        "entry_date": "2026-11-04",
+        "exit_date": null,
+        "pnl": 0.0,
+        "trade_type": "POSITIONAL",
+        "strategy": "Swing",
+        "is_real_trade": false
+    },
+    {
         "ticker": "HINDUNILVR",
         "direction": "SELL",
         "status": "CLOSED",

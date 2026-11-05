@@ -217,7 +217,7 @@ def execute_scan_cycle():
         action, result = core.scan_stock(ticker, market_trend, strict=False, max_days=3)
         
         if action == "KEEP":
-            # If a trigger condition is met, initiate paper trade, notify, and remove from watchlist
+            # If a trigger condition is met, initiate paper trade and keep in watchlist
             if result.get("trigger"):
                 alert_key = f"{ticker}_{result.get('status')}_{result.get('setup_date')}"
                 if alert_key not in alerted_today:
@@ -225,9 +225,9 @@ def execute_scan_cycle():
                     alerted_today.add(alert_key)
                     result["strategy"] = strategy
                     trades.initiate_paper_trade(ticker, result)
-                # Remove from watchlist since the trade has now been triggered and is active
-                remove_list.append(ticker)
-                print(f"Removing {ticker} from watchlist. Reason: Trade triggered.")
+                # Keep in watchlist so it remains visible under active trades and categories
+                keep_list.append(ticker)
+                print(f"Keeping {ticker} in watchlist (Active trade triggered).")
             else:
                 keep_list.append(ticker)
         else:

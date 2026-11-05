@@ -23,7 +23,8 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 def remove_from_watchlist(ticker_to_remove):
-    db_storage.remove_from_watchlist(ticker_to_remove)
+    # Keep active and exited trades intact in user's watchlist; do not auto-purge on trade events
+    pass
 
 def load_paper_trades():
     return db_storage.get_paper_trades()
