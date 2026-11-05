@@ -1,5 +1,5 @@
 //@version=6
-indicator("UMX VYUHA — Institutional MTF Confluence (व्यूह)", shorttitle="UMX VYUHA", overlay=true, max_lines_count=500, max_boxes_count=500, max_labels_count=500, max_bars_back=1000)
+indicator("UMX VYUHA — Institutional MTF Confluence (व्यूह)", shorttitle="UMX VYUHA", overlay=true, max_lines_count=500, max_boxes_count=500, max_labels_count=500, max_bars_back=500)
 
 
 //=============================================================================
