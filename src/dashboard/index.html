@@ -1069,6 +1069,8 @@
         <div class="mobile-tabs" id="mobile-tabs">
             <button class="mobile-tab-btn active" data-tab="positions" onclick="switchMobileTab('positions', event)">Active <span
                     class="mobile-badge" id="mob-active-badge-count"></span></button>
+            <button class="mobile-tab-btn" data-tab="new" onclick="switchMobileTab('new', event)">✨ New <span class="mobile-badge"
+                    id="mob-new-badge-count" style="background:#eab308; color:#000;"></span></button>
             <button class="mobile-tab-btn" data-tab="watchlist" onclick="switchMobileTab('watchlist', event)">Watchlist</button>
             <button class="mobile-tab-btn" data-tab="pending" onclick="switchMobileTab('pending', event)">Pending <span class="mobile-badge"
                     id="mob-pending-badge-count"></span></button>
@@ -1142,29 +1144,29 @@
                         </div>
 
                         <div
-                            style="display: flex; gap: 0.5rem; margin-bottom: 0.8rem; flex-wrap: wrap; align-items: center;">
+                            style="display: flex; gap: 0.4rem; margin-bottom: 0.8rem; overflow-x: auto; white-space: nowrap; align-items: center; padding-bottom: 4px; -webkit-overflow-scrolling: touch;">
                             <button id="tab-all-btn" onclick="showWatchlistTab('ALL')"
-                                style="background: rgba(59, 130, 246, 0.25); border: 1px solid rgba(59, 130, 246, 0.5); color: var(--text-primary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 600;">All</button>
+                                style="background: rgba(59, 130, 246, 0.25); border: 1px solid rgba(59, 130, 246, 0.5); color: var(--text-primary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 600; flex-shrink: 0;">All</button>
                             <button id="tab-new-btn" onclick="showWatchlistTab('NEW')"
-                                style="background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.4); color: #facc15; border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500;">&#10024;
-                                New (Today)</button>
+                                style="background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.4); color: #facc15; border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500; flex-shrink: 0;">&#10024;
+                                New (Today) <span id="wl-new-count" style="font-weight: 700;"></span></button>
                             <button id="tab-intraday-btn" onclick="showWatchlistTab('INTRADAY')"
-                                style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500;">&#9889;
+                                style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500; flex-shrink: 0;">&#9889;
                                 Intraday</button>
                             <button id="tab-positional-btn" onclick="showWatchlistTab('POSITIONAL')"
-                                style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500;">&#128200;
+                                style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500; flex-shrink: 0;">&#128200;
                                 Short Term</button>
                             <button id="tab-longterm-btn" onclick="showWatchlistTab('LONG_TERM')"
-                                style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500;">&#127775;
+                                style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500; flex-shrink: 0;">&#127775;
                                 Long Term</button>
                             <select id="wl-direction-filter" onchange="filterWatchlistByDirection(this.value)"
-                                style="background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.25rem; border-radius: 6px; font-size: 0.8rem; margin-left: auto;">
+                                style="background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.25rem; border-radius: 6px; font-size: 0.8rem; margin-left: auto; flex-shrink: 0;">
                                 <option value="ALL">All Directions</option>
                                 <option value="BUY">Long / Buy</option>
                                 <option value="SELL">Short / Sell</option>
                             </select>
                             <select id="wl-strategy-filter" onchange="filterWatchlistByStrategy(this.value)"
-                                style="background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.25rem; border-radius: 6px; font-size: 0.8rem;">
+                                style="background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.25rem; border-radius: 6px; font-size: 0.8rem; flex-shrink: 0;">
                                 <option value="ALL">All Strategies</option>
                                 <option value="NR7">NR7</option>
                                 <option value="Swing">Swing</option>
@@ -1319,6 +1321,10 @@
 
             if (tabName === 'positions') {
                 if (secPos) secPos.classList.add('active-mobile-tab');
+            } else if (tabName === 'new') {
+                if (sidebar) sidebar.classList.add('active-mobile-tab');
+                if (secWl) secWl.classList.add('active-mobile-tab');
+                showWatchlistTab('NEW');
             } else if (tabName === 'watchlist') {
                 if (sidebar) sidebar.classList.add('active-mobile-tab');
                 if (secWl) secWl.classList.add('active-mobile-tab');
@@ -1843,6 +1849,20 @@
                 mobPending.innerText = '';
             }
 
+            const mobNew = document.getElementById('mob-new-badge-count');
+            const wlNewCountSpan = document.getElementById('wl-new-count');
+            const modalWlNewCountSpan = document.getElementById('modal-wl-new-count');
+            const newCount = (data.watchlist || []).filter(w => w.is_new).length;
+            if (mobNew) {
+                mobNew.innerText = newCount > 0 ? newCount : '';
+            }
+            if (wlNewCountSpan) {
+                wlNewCountSpan.innerText = newCount > 0 ? `(${newCount})` : '';
+            }
+            if (modalWlNewCountSpan) {
+                modalWlNewCountSpan.innerText = newCount > 0 ? `(${newCount})` : '';
+            }
+
             // Populate Active Positions
             allActiveTradesData = trades.filter(t => t.status === 'ACTIVE' || t.status === 'PARTIAL_EXIT');
             renderActiveTrades();
@@ -2042,7 +2062,7 @@
                         style="background: rgba(59, 130, 246, 0.25); border: 1px solid rgba(59, 130, 246, 0.5); color: var(--text-primary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 600;">All</button>
                     <button id="modal-tab-new-btn" onclick="showWatchlistTab('NEW')"
                         style="background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.4); color: #facc15; border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500;">&#10024;
-                        New (Today)</button>
+                        New (Today) <span id="modal-wl-new-count" style="font-weight: 700;"></span></button>
                     <button id="modal-tab-intraday-btn" onclick="showWatchlistTab('INTRADAY')"
                         style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500;">&#9889;
                         Intraday</button>

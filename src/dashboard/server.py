@@ -350,7 +350,8 @@ def get_trades(view: str = Query("auto")):
     trade_tickers = list(set([t["ticker"] for t in active_or_pending if t.get("ticker")]))
 
     # Extract watchlist tickers
-    watchlist_tickers = []
+    today_recs = db_storage.get_today_recommendations()
+    watchlist_tickers = [rec.get("ticker") for rec in today_recs if rec.get("ticker")]
     for wl_item in watchlist:
         parts = wl_item.split('|')
         if len(parts) > 0 and parts[0].strip():
@@ -363,7 +364,7 @@ def get_trades(view: str = Query("auto")):
         tickers_to_query = [t["ticker"] for t in trades if t.get("status") in ["ACTIVE", "PARTIAL_EXIT"] and t.get("ticker")]
     elif view_lower == "pending":
         tickers_to_query = [t["ticker"] for t in trades if t.get("status") == "PENDING" and t.get("ticker")]
-    elif view_lower == "watchlist":
+    elif view_lower in ["watchlist", "new"]:
         tickers_to_query = watchlist_tickers
     else:
         # "all" or "auto"

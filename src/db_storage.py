@@ -205,15 +205,13 @@ def record_daily_recommendation(ticker, strategy, direction, trade_type, entry, 
         print(f"Error saving daily recommendations: {e}")
 
 def get_today_recommendations():
-    """Returns today's fresh recommendations list."""
-    today_str = datetime.datetime.now().strftime("%Y-%m-%d")
+    """Returns today's fresh recommendations list. Falls back to latest recorded recommendations if morning scan has not run yet."""
     if not os.path.exists(DAILY_RECOMMENDATIONS_FILE):
         return []
     try:
         with open(DAILY_RECOMMENDATIONS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-            if data.get("date") == today_str:
-                return data.get("items", [])
+            return data.get("items", [])
     except Exception:
         pass
     return []
