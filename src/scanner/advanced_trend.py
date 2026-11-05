@@ -182,19 +182,26 @@ def check_advanced_trend_for_dataframe(ticker, df):
             target1 = entry + (2 * atr_val)
             target2 = entry + (3 * atr_val)
             
+            risk = entry - sl
+            if risk <= 0: risk = entry * 0.01
+
             if has_pivots:
                 below_levels = [lvl for lvl in pivot_levels if lvl < entry]
                 if below_levels:
                     proposed_sl = below_levels[-1] - buffer_pts
                     sl = proposed_sl if (entry - proposed_sl) >= (1.5 * atr_val) else entry - (1.5 * atr_val)
-                
+                    risk = entry - sl
+                    if risk <= 0: risk = entry * 0.01
+
                 above_levels = [lvl for lvl in pivot_levels if lvl > entry]
-                if above_levels:
-                    target1 = above_levels[0]
-                    target2 = above_levels[1] if len(above_levels) > 1 else above_levels[0] + (above_levels[0] - entry)
-            
-            risk = entry - sl
-            if risk <= 0: risk = entry * 0.01
+                # Enforce minimum 1.5R on target1 so micro-pivots (like 0.8 pts away) don't trigger premature exits
+                valid_t1_levels = [lvl for lvl in above_levels if (lvl - entry) >= (1.5 * risk)]
+                if valid_t1_levels:
+                    target1 = valid_t1_levels[0]
+                    target2 = valid_t1_levels[1] if len(valid_t1_levels) > 1 else target1 + (target1 - entry)
+                else:
+                    target1 = entry + (2.0 * risk)
+                    target2 = entry + (3.0 * risk)
             
             return {
                 "ticker": ticker,
@@ -219,19 +226,26 @@ def check_advanced_trend_for_dataframe(ticker, df):
             target1 = entry - (2 * atr_val)
             target2 = entry - (3 * atr_val)
             
+            risk = sl - entry
+            if risk <= 0: risk = entry * 0.01
+
             if has_pivots:
                 above_levels = [lvl for lvl in pivot_levels if lvl > entry]
                 if above_levels:
                     proposed_sl = above_levels[0] + buffer_pts
                     sl = proposed_sl if (proposed_sl - entry) >= (1.5 * atr_val) else entry + (1.5 * atr_val)
+                    risk = sl - entry
+                    if risk <= 0: risk = entry * 0.01
                     
                 below_levels = sorted([lvl for lvl in pivot_levels if lvl < entry], reverse=True)
-                if below_levels:
-                    target1 = below_levels[0]
-                    target2 = below_levels[1] if len(below_levels) > 1 else below_levels[0] - (entry - below_levels[0])
-            
-            risk = sl - entry
-            if risk <= 0: risk = entry * 0.01
+                # Enforce minimum 1.5R on target1 so micro-pivots don't trigger premature exits
+                valid_t1_levels = [lvl for lvl in below_levels if (entry - lvl) >= (1.5 * risk)]
+                if valid_t1_levels:
+                    target1 = valid_t1_levels[0]
+                    target2 = valid_t1_levels[1] if len(valid_t1_levels) > 1 else target1 - (entry - target1)
+                else:
+                    target1 = entry - (2.0 * risk)
+                    target2 = entry - (3.0 * risk)
             
             return {
                 "ticker": ticker,

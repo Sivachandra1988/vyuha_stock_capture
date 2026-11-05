@@ -1121,23 +1121,28 @@
                         </div>
                     </div>
                     <div id="watchlist-content" style="display: block;">
-                        <!-- Add Stock to Watchlist Bar -->
+                        <!-- Add Stock to Watchlist Bar & Primary Filters -->
                         <div style="display: flex; gap: 0.4rem; margin-bottom: 0.6rem; align-items: center; flex-wrap: wrap; background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border-color);">
                             <input type="text" id="wl-new-ticker" placeholder="Symbol (e.g. RELIANCE)" style="background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.5rem; border-radius: 6px; font-size: 0.8rem; text-transform: uppercase; flex: 1; min-width: 120px;" onkeydown="if(event.key==='Enter') submitAddToWatchlist()">
-                            <select id="wl-new-type" style="background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.4rem; border-radius: 6px; font-size: 0.75rem;">
-                                <option value="POSITIONAL">Short Term</option>
+                            <select id="wl-new-type" onchange="onWatchlistTypeDropdownChange(this.value)" style="background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.4rem; border-radius: 6px; font-size: 0.75rem;">
+                                <option value="ALL">All Types</option>
+                                <option value="POSITIONAL" selected>Short Term</option>
                                 <option value="INTRADAY">Intraday</option>
                                 <option value="LONG_TERM">Long Term</option>
                             </select>
-                            <select id="wl-new-dir" style="background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.4rem; border-radius: 6px; font-size: 0.75rem;">
-                                <option value="Long">Long / Buy</option>
-                                <option value="Short">Short / Sell</option>
+                            <select id="wl-new-dir" onchange="filterWatchlistByDirection(this.value)" style="background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.4rem; border-radius: 6px; font-size: 0.75rem;">
+                                <option value="ALL">All Directions</option>
+                                <option value="BUY" selected>Long / Buy</option>
+                                <option value="SELL">Short / Sell</option>
                             </select>
-                            <select id="wl-new-strat" style="background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.4rem; border-radius: 6px; font-size: 0.75rem;">
-                                <option value="Swing">Swing</option>
+                            <select id="wl-new-strat" onchange="filterWatchlistByStrategy(this.value)" style="background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.4rem; border-radius: 6px; font-size: 0.75rem;">
+                                <option value="ALL">All Strategies</option>
+                                <option value="Swing" selected>Swing</option>
                                 <option value="NR7">NR7</option>
                                 <option value="UT_Bot">UT Bot</option>
                                 <option value="AdvancedTrend">Advanced Trend</option>
+                                <option value="SMC_FVG">SMC FVG</option>
+                                <option value="AI_SMC_MC">AI SMC MC</option>
                                 <option value="Custom">Custom</option>
                             </select>
                             <button onclick="submitAddToWatchlist()" style="background: rgba(16, 185, 129, 0.25); border: 1px solid rgba(16, 185, 129, 0.5); color: #34d399; border-radius: 6px; padding: 0.3rem 0.75rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;">+ Add</button>
@@ -1220,9 +1225,13 @@
             const dirSelect = document.getElementById('wl-new-dir');
             const stratSelect = document.getElementById('wl-new-strat');
 
-            const tradeType = typeSelect ? typeSelect.value : 'POSITIONAL';
-            const direction = dirSelect ? dirSelect.value : 'Long';
-            const strategy = stratSelect ? stratSelect.value : 'Swing';
+            let tradeType = typeSelect ? typeSelect.value : 'POSITIONAL';
+            if (tradeType === 'ALL') tradeType = 'POSITIONAL';
+            let direction = dirSelect ? dirSelect.value : 'Long';
+            if (direction === 'ALL' || direction === 'BUY') direction = 'Long';
+            else if (direction === 'SELL') direction = 'Short';
+            let strategy = stratSelect ? stratSelect.value : 'Swing';
+            if (strategy === 'ALL') strategy = 'Swing';
 
             try {
                 const res = await fetch('/api/watchlist/add', {
@@ -1265,21 +1274,34 @@
             }
         }
 
+        function onWatchlistTypeDropdownChange(val) {
+            showWatchlistTab(val);
+        }
+
         function filterWatchlistByStrategy(strategy) {
             currentStrategyFilter = strategy;
             const select1 = document.getElementById('wl-strategy-filter');
             const select2 = document.getElementById('modal-wl-strategy-filter');
+            const selectNew = document.getElementById('wl-new-strat');
             if (select1) select1.value = strategy;
             if (select2) select2.value = strategy;
+            if (selectNew) selectNew.value = strategy;
             renderWatchlist();
         }
 
         function filterWatchlistByDirection(direction) {
-            currentDirectionFilter = direction;
+            let normalizedDir = direction;
+            if (direction === 'Long' || direction === 'BUY') normalizedDir = 'BUY';
+            else if (direction === 'Short' || direction === 'SELL') normalizedDir = 'SELL';
+            else if (direction === 'ALL') normalizedDir = 'ALL';
+            currentDirectionFilter = normalizedDir;
+
             const select1 = document.getElementById('wl-direction-filter');
             const select2 = document.getElementById('modal-wl-direction-filter');
-            if (select1) select1.value = direction;
-            if (select2) select2.value = direction;
+            const selectNew = document.getElementById('wl-new-dir');
+            if (select1) select1.value = normalizedDir;
+            if (select2) select2.value = normalizedDir;
+            if (selectNew) selectNew.value = normalizedDir;
             renderWatchlist();
         }
 
@@ -1392,6 +1414,11 @@
                     }
                 }
             });
+
+            const typeDropdown = document.getElementById('wl-new-type');
+            if (typeDropdown && tab !== 'NEW') {
+                typeDropdown.value = tab;
+            }
 
             renderWatchlist();
         }
