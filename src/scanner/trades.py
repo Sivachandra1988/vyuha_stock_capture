@@ -185,7 +185,7 @@ def update_and_manage_trades(send_telegram_fn):
             
             if trade["status"] == "PENDING":
                 trade_type = trade.get("trade_type", "POSITIONAL")
-                max_wait = 0 if trade_type == "INTRADAY" else 5
+                max_wait = 1 if trade_type in ["BTST", "STBT"] else (0 if trade_type == "INTRADAY" else 5)
                 
                 if trading_days_elapsed > max_wait:
                     trade["status"] = "CLOSED"
@@ -267,8 +267,9 @@ def update_and_manage_trades(send_telegram_fn):
                 eval_low = close if is_entry_day else low
                 eval_high = close if is_entry_day else high
 
-                # Max holding duration guard (e.g. 1 day for Intraday, 15 days for Positional/Swing)
-                max_hold = 1 if trade.get("trade_type") == "INTRADAY" else 15
+                # Max holding duration guard (e.g. 1 day for Intraday, 2 days for BTST/STBT, 15 days for Positional/Swing)
+                t_type = trade.get("trade_type", "POSITIONAL")
+                max_hold = 1 if t_type == "INTRADAY" else (2 if t_type in ["BTST", "STBT"] else 15)
                 if duration >= max_hold:
                     trade["status"] = "CLOSED"
                     trade["exit_date"] = date_str

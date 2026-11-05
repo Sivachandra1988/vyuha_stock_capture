@@ -29,7 +29,7 @@ if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
 from connectors import angelone
-from scanner import core, eod, trades, swing, advanced_trend, vyuha
+from scanner import core, eod, trades, swing, advanced_trend, vyuha, cas_btst
 import db_storage
 
 # Telegram credentials (reads from environment variables with fallback)
@@ -65,6 +65,7 @@ ADVANCED_TREND_TIMINGS = [
 
 alerted_today = set()
 eod_scanned_today = ""
+cas_scanned_today = ""
 current_date = datetime.now().strftime("%Y-%m-%d")
 
 def send_telegram(message, chat_id=None):
@@ -346,6 +347,7 @@ def run_scanner_loop(continuous=True, daemon=False, force=False):
         print(f" Checking timings (NR7): {', '.join(CHECK_TIMINGS)}")
         print(f" Checking timings (Swing): {', '.join(SWING_TIMINGS)}")
         print(f" Checking timings (Adv Trend): Every 15m (09:30 - 15:15)")
+        print(f" Checking timings (CAS BTST/STBT): 15:15 IST (Closing Session)")
         print(" Sending Telegram alerts to configured chat.")
         print("===============================================================\n")
         
@@ -383,7 +385,7 @@ def run_scanner_loop(continuous=True, daemon=False, force=False):
         print(f"\n🟢 [INFO] Continuous live monitoring started @ {datetime.now().strftime('%H:%M:%S')} IST.")
         print("   Monitoring active trades every 30s | Running 15m & hourly scans till 3:30 PM...\n")
             
-        global eod_scanned_today
+        global eod_scanned_today, cas_scanned_today
         while True:
             open_status, reason = is_market_open()
             if not open_status and not force:
@@ -407,6 +409,12 @@ def run_scanner_loop(continuous=True, daemon=False, force=False):
             except Exception as e:
                 print(f"[ERROR] Trade management error: {e}")
             
+            # Check and trigger Institutional CAS BTST / STBT Scan at 15:15 - 15:25 IST
+            if "15:15" <= now_str <= "15:25" and cas_scanned_today != today_str:
+                print(f"[INFO] Running scheduled Institutional CAS BTST / STBT Scan @ {now_str} IST...")
+                cas_btst.run_cas_scan(send_telegram)
+                cas_scanned_today = today_str
+
             # Check and trigger EOD scan at 3:15 PM - 3:30 PM
             if "15:15" <= now_str <= "15:30" and eod_scanned_today != today_str:
                 market_trend = get_nifty_trend()
@@ -463,6 +471,9 @@ if __name__ == "__main__":
             sys.exit(0)
         elif arg == "--test-vyuha-intraday":
             vyuha.execute_vyuha_intraday_scan(send_telegram, market_trend="NEUTRAL")
+            sys.exit(0)
+        elif arg in ["--test-cas", "--cas", "-cas"]:
+            cas_btst.run_cas_scan(send_telegram, force=True)
             sys.exit(0)
         elif arg in ["--once", "--single", "-s"]:
             run_scanner_loop(continuous=False, daemon=False)

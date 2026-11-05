@@ -1127,6 +1127,7 @@
                             <select id="wl-new-type" onchange="onWatchlistTypeDropdownChange(this.value)" style="background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.4rem; border-radius: 6px; font-size: 0.75rem;">
                                 <option value="ALL">All Types</option>
                                 <option value="POSITIONAL" selected>Short Term</option>
+                                <option value="BTST">BTST / STBT</option>
                                 <option value="INTRADAY">Intraday</option>
                                 <option value="LONG_TERM">Long Term</option>
                             </select>
@@ -1138,6 +1139,8 @@
                             <select id="wl-new-strat" onchange="filterWatchlistByStrategy(this.value)" style="background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.4rem; border-radius: 6px; font-size: 0.75rem;">
                                 <option value="ALL">All Strategies</option>
                                 <option value="Swing" selected>Swing</option>
+                                <option value="CAS_BTST">CAS BTST</option>
+                                <option value="CAS_STBT">CAS STBT</option>
                                 <option value="NR7">NR7</option>
                                 <option value="UT_Bot">UT Bot</option>
                                 <option value="AdvancedTrend">Advanced Trend</option>
@@ -1155,6 +1158,9 @@
                             <button id="tab-new-btn" onclick="showWatchlistTab('NEW')"
                                 style="background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.4); color: #facc15; border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500; flex-shrink: 0;">&#10024;
                                 New (Today) <span id="wl-new-count" style="font-weight: 700;"></span></button>
+                            <button id="tab-btst-btn" onclick="showWatchlistTab('BTST')"
+                                style="background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.4); color: #38bdf8; border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500; flex-shrink: 0;">&#127919;
+                                BTST / STBT</button>
                             <button id="tab-intraday-btn" onclick="showWatchlistTab('INTRADAY')"
                                 style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500; flex-shrink: 0;">&#9889;
                                 Intraday</button>
@@ -1173,6 +1179,8 @@
                             <select id="wl-strategy-filter" onchange="filterWatchlistByStrategy(this.value)"
                                 style="background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.25rem; border-radius: 6px; font-size: 0.8rem; flex-shrink: 0;">
                                 <option value="ALL">All Strategies</option>
+                                <option value="CAS_BTST">CAS BTST</option>
+                                <option value="CAS_STBT">CAS STBT</option>
                                 <option value="NR7">NR7</option>
                                 <option value="Swing">Swing</option>
                                 <option value="UT_Bot">UT Bot</option>
@@ -1387,11 +1395,13 @@
             const tabs = [
                 { id: 'tab-all-btn', name: 'ALL' },
                 { id: 'tab-new-btn', name: 'NEW' },
+                { id: 'tab-btst-btn', name: 'BTST' },
                 { id: 'tab-intraday-btn', name: 'INTRADAY' },
                 { id: 'tab-positional-btn', name: 'POSITIONAL' },
                 { id: 'tab-longterm-btn', name: 'LONG_TERM' },
                 { id: 'modal-tab-all-btn', name: 'ALL' },
                 { id: 'modal-tab-new-btn', name: 'NEW' },
+                { id: 'modal-tab-btst-btn', name: 'BTST' },
                 { id: 'modal-tab-intraday-btn', name: 'INTRADAY' },
                 { id: 'modal-tab-positional-btn', name: 'POSITIONAL' },
                 { id: 'modal-tab-longterm-btn', name: 'LONG_TERM' }
@@ -1401,15 +1411,16 @@
                 const btn = document.getElementById(t.id);
                 if (btn) {
                     const isNewTab = t.name === 'NEW';
+                    const isBtstTab = t.name === 'BTST';
                     if (tab === t.name) {
-                        btn.style.background = isNewTab ? 'rgba(234, 179, 8, 0.3)' : 'rgba(59, 130, 246, 0.25)';
-                        btn.style.color = isNewTab ? '#fde047' : 'var(--text-primary)';
-                        btn.style.borderColor = isNewTab ? 'rgba(234, 179, 8, 0.7)' : 'rgba(59, 130, 246, 0.5)';
+                        btn.style.background = isBtstTab ? 'rgba(56, 189, 248, 0.25)' : (isNewTab ? 'rgba(234, 179, 8, 0.3)' : 'rgba(59, 130, 246, 0.25)');
+                        btn.style.color = isBtstTab ? '#38bdf8' : (isNewTab ? '#fde047' : 'var(--text-primary)');
+                        btn.style.borderColor = isBtstTab ? 'rgba(56, 189, 248, 0.6)' : (isNewTab ? 'rgba(234, 179, 8, 0.7)' : 'rgba(59, 130, 246, 0.5)');
                         btn.style.fontWeight = '600';
                     } else {
-                        btn.style.background = isNewTab ? 'rgba(234, 179, 8, 0.08)' : 'rgba(255, 255, 255, 0.05)';
-                        btn.style.color = isNewTab ? '#facc15' : 'var(--text-secondary)';
-                        btn.style.borderColor = isNewTab ? 'rgba(234, 179, 8, 0.3)' : 'var(--border-color)';
+                        btn.style.background = isBtstTab ? 'rgba(56, 189, 248, 0.08)' : (isNewTab ? 'rgba(234, 179, 8, 0.08)' : 'rgba(255, 255, 255, 0.05)');
+                        btn.style.color = isBtstTab ? '#38bdf8' : (isNewTab ? '#facc15' : 'var(--text-secondary)');
+                        btn.style.borderColor = isBtstTab ? 'rgba(56, 189, 248, 0.3)' : (isNewTab ? 'rgba(234, 179, 8, 0.3)' : 'var(--border-color)');
                         btn.style.fontWeight = '500';
                     }
                 }
@@ -1524,7 +1535,7 @@
                                 <span class="direction-badge ${direction === 'BUY' ? 'buy' : 'sell'}">
                                     ${direction === 'BUY' ? 'Long' : 'Short'}
                                 </span>
-                                ${trade.trade_type ? `<span class="direction-badge" style="background: ${trade.trade_type === 'INTRADAY' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)'}; color: ${trade.trade_type === 'INTRADAY' ? '#c084fc' : '#60a5fa'}; margin-left: 0.5rem;">${trade.trade_type === 'INTRADAY' ? 'Intraday' : 'Short Term'}</span>` : ''}
+                                ${trade.trade_type ? `<span class="direction-badge" style="background: ${trade.trade_type === 'INTRADAY' ? 'rgba(168, 85, 247, 0.2)' : (trade.trade_type === 'BTST' ? 'rgba(56, 189, 248, 0.2)' : (trade.trade_type === 'STBT' ? 'rgba(244, 63, 94, 0.2)' : 'rgba(59, 130, 246, 0.2)'))}; color: ${trade.trade_type === 'INTRADAY' ? '#c084fc' : (trade.trade_type === 'BTST' ? '#38bdf8' : (trade.trade_type === 'STBT' ? '#f43f5e' : '#60a5fa'))}; margin-left: 0.5rem;">${trade.trade_type}</span>` : ''}
                                 ${realBadge}
                                 ${daysActiveText}
                                 <span style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 500; margin-left: 0.5rem;">Qty: ${trade.quantity}</span>
@@ -1594,7 +1605,7 @@
                                     <span style="font-size: 0.68rem; color: #60a5fa; background: rgba(59,130,246,0.18); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(59,130,246,0.3);">📊 Chart</span>
                                     <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-secondary); margin-left: 0.3rem;">Qty: ${trade.quantity}</span>
                                 </div>
-                                <div class="pending-date">Setup: ${trade.setup_date} <span class="direction-badge ${direction === 'BUY' ? 'buy' : 'sell'}" style="margin-left: 0.5rem; font-size: 0.65rem;">${direction === 'BUY' ? 'Long' : 'Short'}</span>${trade.trade_type ? `<span class="direction-badge" style="margin-left: 0.5rem; font-size: 0.65rem; background: ${trade.trade_type === 'INTRADAY' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)'}; color: ${trade.trade_type === 'INTRADAY' ? '#c084fc' : '#60a5fa'};"> ${trade.trade_type === 'INTRADAY' ? 'Intraday' : 'Short Term'}</span>` : ''}${realBadge}</div>
+                                <div class="pending-date">Setup: ${trade.setup_date} <span class="direction-badge ${direction === 'BUY' ? 'buy' : 'sell'}" style="margin-left: 0.5rem; font-size: 0.65rem;">${direction === 'BUY' ? 'Long' : 'Short'}</span>${trade.trade_type ? `<span class="direction-badge" style="margin-left: 0.5rem; font-size: 0.65rem; background: ${trade.trade_type === 'INTRADAY' ? 'rgba(168, 85, 247, 0.2)' : (trade.trade_type === 'BTST' ? 'rgba(56, 189, 248, 0.2)' : (trade.trade_type === 'STBT' ? 'rgba(244, 63, 94, 0.2)' : 'rgba(59, 130, 246, 0.2)'))}; color: ${trade.trade_type === 'INTRADAY' ? '#c084fc' : (trade.trade_type === 'BTST' ? '#38bdf8' : (trade.trade_type === 'STBT' ? '#f43f5e' : '#60a5fa'))};"> ${trade.trade_type}</span>` : ''}${realBadge}</div>
                             </div>
                             <div class="pending-right" style="display: flex; flex-direction: column; align-items: flex-end;">
                                 <div class="pending-price-label">Trigger</div>
@@ -1637,6 +1648,8 @@
                     typeMatch = true;
                 } else if (currentTab === 'NEW') {
                     typeMatch = item.is_new === true;
+                } else if (currentTab === 'BTST') {
+                    typeMatch = (type === 'BTST' || type === 'STBT' || strat.toUpperCase().includes('CAS') || strat.toUpperCase().includes('BTST') || strat.toUpperCase().includes('STBT'));
                 } else {
                     typeMatch = type === currentTab;
                 }
@@ -1648,7 +1661,7 @@
 
             let htmlContent = '';
             if (filtered.length === 0) {
-                let tabNameStr = currentTab === 'ALL' ? 'watchlist' : (currentTab === 'NEW' ? 'New (Today)' : (currentTab === 'INTRADAY' ? 'Intraday' : (currentTab === 'LONG_TERM' ? 'Long Term' : 'Short Term')));
+                let tabNameStr = currentTab === 'ALL' ? 'watchlist' : (currentTab === 'NEW' ? 'New (Today)' : (currentTab === 'BTST' ? 'BTST / STBT' : (currentTab === 'INTRADAY' ? 'Intraday' : (currentTab === 'LONG_TERM' ? 'Long Term' : 'Short Term'))));
                 htmlContent = `<div class="no-data" style="padding: 1.5rem; font-size: 0.85rem; grid-column: 1 / -1;">No ${tabNameStr} candidates found matching filters.</div>`;
             } else {
                 htmlContent = filtered.map(t => {
@@ -1666,7 +1679,15 @@
                     let typeBg = tradeType === 'INTRADAY' ? 'rgba(168,85,247,0.15)' : 'rgba(59,130,246,0.15)';
                     let typeName = tradeType === 'INTRADAY' ? 'Intraday' : 'Short Term';
 
-                    if (tradeType === 'LONG_TERM') {
+                    if (tradeType === 'BTST') {
+                        typeColor = '#38bdf8';
+                        typeBg = 'rgba(56, 189, 248, 0.15)';
+                        typeName = 'BTST';
+                    } else if (tradeType === 'STBT') {
+                        typeColor = '#f43f5e';
+                        typeBg = 'rgba(244, 63, 94, 0.15)';
+                        typeName = 'STBT';
+                    } else if (tradeType === 'LONG_TERM') {
                         typeColor = '#facc15';
                         typeBg = 'rgba(250,204,21,0.15)';
                         typeName = 'Long Term';
@@ -1675,6 +1696,8 @@
                     const newBadgeHtml = t.is_new ? `<span style="font-size:0.6rem; background:rgba(234,179,8,0.2); color:#facc15; border:1px solid rgba(234,179,8,0.5); padding:0.05rem 0.35rem; border-radius:4px; font-weight:700;">✨ NEW</span>` : '';
 
                     let strategyDesc = strategy;
+                    if (strategy === 'CAS_BTST') strategyDesc = 'Institutional CAS BTST Inflow';
+                    if (strategy === 'CAS_STBT') strategyDesc = 'Institutional CAS STBT Breakdown';
                     if (strategy === 'NR7') strategyDesc = 'Volatility Contraction (NR7) Breakout';
                     if (strategy === 'Swing') strategyDesc = 'Swing Setup';
                     if (strategy === 'UT_Bot') strategyDesc = 'UT Bot Trend Following';
@@ -2090,6 +2113,9 @@
                     <button id="modal-tab-new-btn" onclick="showWatchlistTab('NEW')"
                         style="background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.4); color: #facc15; border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500;">&#10024;
                         New (Today) <span id="modal-wl-new-count" style="font-weight: 700;"></span></button>
+                    <button id="modal-tab-btst-btn" onclick="showWatchlistTab('BTST')"
+                        style="background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.4); color: #38bdf8; border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500;">&#127919;
+                        BTST / STBT</button>
                     <button id="modal-tab-intraday-btn" onclick="showWatchlistTab('INTRADAY')"
                         style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; font-weight: 500;">&#9889;
                         Intraday</button>
@@ -2108,6 +2134,8 @@
                     <select id="modal-wl-strategy-filter" onchange="filterWatchlistByStrategy(this.value)"
                         style="background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.25rem; border-radius: 6px; font-size: 0.8rem;">
                         <option value="ALL">All Strategies</option>
+                        <option value="CAS_BTST">CAS BTST</option>
+                        <option value="CAS_STBT">CAS STBT</option>
                         <option value="NR7">NR7</option>
                         <option value="Swing">Swing</option>
                         <option value="UT_Bot">UT Bot</option>
