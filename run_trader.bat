@@ -7,6 +7,9 @@ wmic process where "name='python.exe' and CommandLine like '%%breakout_scanner.p
 
 timeout /t 1 /nobreak >nul
 
+echo Cleaning temporary files and SQLite caches from disk...
+python src\cleanup.py >nul 2>&1
+
 echo Starting Dashboard and Scanner in current terminal...
 python dashboard_server.py
 

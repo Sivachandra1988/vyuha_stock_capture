@@ -25,6 +25,13 @@ sys.path.append(os.path.join(BASE_DIR, "src"))
 
 from dashboard import server
 
+# Cleanup temporary disk and SQLite caches on startup
+try:
+    import cleanup
+    cleanup.cleanup_all_temp_data(verbose=True)
+except Exception as e:
+    print(f"[WARN] Startup cleanup: {e}")
+
 if __name__ == "__main__":
     try:
         server.run_server()

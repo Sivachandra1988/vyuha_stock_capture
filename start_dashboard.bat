@@ -36,7 +36,12 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":!PORT! " ^| findstr "LISTEN
     taskkill /f /pid %%a >nul 2>&1
 )
 
-:: 4. Launch integrated Web UI & Scanner background thread
+:: 4. Pre-startup cleanup of temporary disk data and SQLite caches
+echo Cleaning temporary files and SQLite caches from disk...
+python src\cleanup.py >nul 2>&1
+echo [OK] Temporary disk and SQLite cache cleaned.
+
+:: 5. Launch integrated Web UI & Scanner background thread
 echo.
 echo ======================================================================
 echo   Launching Web UI and Background Scanner Engine...

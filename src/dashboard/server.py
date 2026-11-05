@@ -53,6 +53,14 @@ import threading
 def start_scanner_background_thread():
     if BASE_DIR not in sys.path:
         sys.path.append(BASE_DIR)
+    
+    # Clean temporary disk data and SQLite caches on application startup
+    try:
+        import cleanup
+        cleanup.cleanup_all_temp_data(verbose=False)
+    except Exception:
+        pass
+
     try:
         import breakout_scanner
         thread = threading.Thread(

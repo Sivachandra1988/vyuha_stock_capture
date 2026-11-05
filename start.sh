@@ -26,6 +26,17 @@ echo "Binding Web UI to : http://$HOST:$PORT"
 echo "System Timezone   : $TZ ($(date))"
 echo ""
 
+# ------------------------------------------------------------------------------
+# Pre-Startup Cleanup: Remove Disk Temp Data & SQLite Caches
+# ------------------------------------------------------------------------------
+echo "🧹 Cleaning temporary files and SQLite caches from disk..."
+rm -rf ~/.cache/py-yfinance/* ~/.cache/yfinance/* /tmp/py-yfinance* /tmp/*.sqlite* 2>/dev/null || true
+rm -rf data/backtest_cache/* 2>/dev/null || true
+find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+find . -type f \( -name "*.pyc" -o -name "*.pyo" -o -name "*.tmp" -o -name "*.temp" -o -name "*.sqlite*" -o -name "*.db-wal" -o -name "*.db-shm" \) -delete 2>/dev/null || true
+echo "✓ Disk & SQLite temp cache cleared."
+echo ""
+
 # Activate virtualenv if present
 if [ -d ".venv" ]; then
     source .venv/bin/activate
