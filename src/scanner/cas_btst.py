@@ -118,7 +118,7 @@ def calculate_atr_15m(df, period=14):
 
     return float(atr[-1])
 
-def check_cas_setup(ticker, df_15m, df_daily=None):
+def check_cas_setup(ticker, df_15m, df_daily=None, market_trend="NEUTRAL"):
     """
     Evaluates institutional Closing Auction Session (CAS) BTST or STBT setup.
     Returns setup dictionary or None.
@@ -175,6 +175,8 @@ def check_cas_setup(ticker, df_15m, df_daily=None):
     pdh = None
     pdl = None
     vyuha_zones = None
+    daily_ema20 = None
+    daily_rsi = None
     daily_atr = atr_15m * 2.5
 
     if df_daily is not None and len(df_daily) >= 5:
@@ -185,6 +187,15 @@ def check_cas_setup(ticker, df_15m, df_daily=None):
             atr_s = vyuha.calculate_atr(df_daily_clean, period=14)
             daily_atr = float(atr_s.iloc[-1]) if len(atr_s) > 0 and pd.notna(atr_s.iloc[-1]) else (atr_15m * 2.5)
             vyuha_zones = vyuha.calculate_vyuha_zones(df_daily_clean, cmp, daily_atr)
+
+            if len(df_daily_clean) >= 20:
+                d_close = df_daily_clean['Close']
+                daily_ema20 = float(d_close.ewm(span=20, adjust=False).mean().iloc[-1])
+                delta = d_close.diff()
+                gain = delta.where(delta > 0, 0).rolling(14).mean()
+                loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+                rs = gain / loss.replace(0, 0.0001)
+                daily_rsi = float((100 - (100 / (1 + rs))).iloc[-1])
 
     # High-Resolution 40-Bin FRVP Volume POC
     poc_price, vah, val = vyuha.calculate_frvp_poc(df_today, num_bins=40)
@@ -197,19 +208,21 @@ def check_cas_setup(ticker, df_15m, df_daily=None):
     # 1. BTST SETUP EVALUATION (Buy Today, Sell Tomorrow)
     # =========================================================================
     # Conditions:
-    # 1. Closing in top 15% of day range (range_pos >= 0.85, ideal >= 0.88)
+    # 1. Closing in top 10% of day range (range_pos >= 0.88, ideal >= 0.90)
     # 2. Bullish session (cmp > day_open)
     # 3. Holding strictly above Day VWAP (cmp > day_vwap)
     # 4. Holding above or breaking Previous Day High (cmp >= pdh * 0.995 if pdh exists)
-    # 5. CAS Volume expansion (cas_vol_ratio >= 1.4, ideal >= 2.0x)
+    # 5. CAS Volume expansion (cas_vol_ratio >= 1.7, ideal >= 2.0x)
     # 6. Above FRVP Volume POC
     # 7. Ample clearance to overhead Supply 1 zone (> 1.2%)
+    # 8. Market Trend alignment (suppress if market_trend == "BEARISH")
     # =========================================================================
     is_btst = False
-    if range_pos >= 0.85 and cmp > day_vwap and cmp > day_open:
+    if market_trend != "BEARISH" and range_pos >= 0.88 and cmp > day_vwap and cmp > day_open:
         pdh_ok = (pdh is None) or (cmp >= pdh * 0.995)
         poc_ok = (poc_price is None) or (cmp >= poc_price * 0.997)
-        vol_ok = cas_vol_ratio >= 1.35
+        vol_ok = cas_vol_ratio >= 1.7
+        trend_ok = (daily_ema20 is None or cmp >= daily_ema20 * 0.99) and (daily_rsi is None or daily_rsi >= 48)
 
         # Check supply zone headroom
         supply_headroom_ok = True
@@ -220,22 +233,20 @@ def check_cas_setup(ticker, df_15m, df_daily=None):
                 if headroom_pct < 1.2:
                     supply_headroom_ok = False
 
-        if pdh_ok and poc_ok and vol_ok and supply_headroom_ok:
+        if pdh_ok and poc_ok and vol_ok and trend_ok and supply_headroom_ok:
             is_btst = True
 
     if is_btst:
-        # Tight generic SL (1.5x ATR / Max 2.0% risk)
-        raw_sl = max(day_vwap * 0.996, cmp - (1.5 * atr_15m))
-        sl = max(raw_sl, cmp * 0.982)  # Cap SL at 1.8% max risk
+        # Swing-adaptive SL (max of day low or 2.2% max risk)
+        sl = round(max(day_low * 0.998, cmp * 0.978), 2)
         risk = cmp - sl
         if risk <= 0:
-            sl = cmp * 0.985
+            sl = round(cmp * 0.980, 2)
             risk = cmp - sl
 
-        # Targets: T1 = 1.5R (approx +1.8% to +2.5% morning gap-up), T2 = 2.5R - 3.0R
+        # Targets: T1 = 1.5R (approx +1.8% to +2.5% morning gap-up), T2 = 2.8R
         target1 = round(cmp + max(1.5 * risk, cmp * 0.018), 2)
         target2 = round(cmp + max(2.8 * risk, cmp * 0.035), 2)
-        sl = round(sl, 2)
         entry = round(cmp, 2)
 
         score = float(range_pos * 100.0) + (cas_vol_ratio * 15.0)
@@ -263,20 +274,12 @@ def check_cas_setup(ticker, df_15m, df_daily=None):
     # =========================================================================
     # 2. STBT SETUP EVALUATION (Sell Today, Buy Tomorrow)
     # =========================================================================
-    # Conditions:
-    # 1. Closing in bottom 15% of day range (range_pos <= 0.15, ideal <= 0.12)
-    # 2. Bearish session (cmp < day_open)
-    # 3. Trapped strictly below Day VWAP (cmp < day_vwap)
-    # 4. Breaking or below Previous Day Low (cmp <= pdl * 1.005 if pdl exists)
-    # 5. CAS Volume expansion on breakdown (cas_vol_ratio >= 1.35)
-    # 6. Below FRVP Volume POC
-    # 7. Ample clearance down to Demand 1 zone (> 1.2%)
-    # =========================================================================
     is_stbt = False
-    if range_pos <= 0.15 and cmp < day_vwap and cmp < day_open:
+    if market_trend != "BULLISH" and range_pos <= 0.12 and cmp < day_vwap and cmp < day_open:
         pdl_ok = (pdl is None) or (cmp <= pdl * 1.005)
         poc_ok = (poc_price is None) or (cmp <= poc_price * 1.003)
-        vol_ok = cas_vol_ratio >= 1.35
+        vol_ok = cas_vol_ratio >= 1.7
+        trend_ok = (daily_ema20 is None or cmp <= daily_ema20 * 1.01) and (daily_rsi is None or daily_rsi <= 52)
 
         # Check demand zone headroom
         demand_headroom_ok = True
@@ -287,20 +290,18 @@ def check_cas_setup(ticker, df_15m, df_daily=None):
                 if headroom_pct < 1.2:
                     demand_headroom_ok = False
 
-        if pdl_ok and poc_ok and vol_ok and demand_headroom_ok:
+        if pdl_ok and poc_ok and vol_ok and trend_ok and demand_headroom_ok:
             is_stbt = True
 
     if is_stbt:
-        raw_sl = min(day_vwap * 1.004, cmp + (1.5 * atr_15m))
-        sl = min(raw_sl, cmp * 1.018)  # Cap SL at 1.8% max risk
+        sl = round(min(day_high * 1.002, cmp * 1.022), 2)
         risk = sl - cmp
         if risk <= 0:
-            sl = cmp * 1.015
+            sl = round(cmp * 1.020, 2)
             risk = sl - cmp
 
         target1 = round(cmp - max(1.5 * risk, cmp * 0.018), 2)
         target2 = round(cmp - max(2.8 * risk, cmp * 0.035), 2)
-        sl = round(sl, 2)
         entry = round(cmp, 2)
 
         score = float((1.0 - range_pos) * 100.0) + (cas_vol_ratio * 15.0)
@@ -327,12 +328,17 @@ def check_cas_setup(ticker, df_15m, df_daily=None):
 
     return None
 
-def run_cas_scan(send_telegram_fn=None, force=False):
+    return None
+
+def run_cas_scan(send_telegram_fn=None, force=False, market_trend=None):
     """
     Executes the institutional CAS (Closing Auction Session) BTST / STBT Scan.
     Runs between 15:15 IST and 15:25 IST.
     """
     load_cas_alerts()
+
+    if market_trend is None:
+        market_trend = core.get_market_regime()
 
     tickers = core.get_dynamic_tickers()
     if not tickers:
@@ -341,7 +347,7 @@ def run_cas_scan(send_telegram_fn=None, force=False):
 
     print(f"\n===============================================================")
     print(f"🏛️ [INFO] Running Institutional CAS BTST / STBT Scan @ {datetime.now().strftime('%H:%M:%S')} IST")
-    print(f"   Universe: {len(tickers)} Liquid F&O Symbols | Timeframe: 15m + Daily")
+    print(f"   Universe: {len(tickers)} Liquid F&O Symbols | Market Trend: {market_trend}")
     print(f"===============================================================")
 
     ticker_ns_list = [t + ".NS" for t in tickers]
@@ -391,7 +397,7 @@ def run_cas_scan(send_telegram_fn=None, force=False):
             if len(df_ticker_15m) < 15:
                 continue
 
-            res = check_cas_setup(ticker, df_ticker_15m, df_ticker_daily)
+            res = check_cas_setup(ticker, df_ticker_15m, df_ticker_daily, market_trend=market_trend)
             if res:
                 if res["trade_type"] == "BTST":
                     candidates_btst.append(res)

@@ -411,8 +411,9 @@ def run_scanner_loop(continuous=True, daemon=False, force=False):
             
             # Check and trigger Institutional CAS BTST / STBT Scan at 15:15 - 15:25 IST
             if "15:15" <= now_str <= "15:25" and cas_scanned_today != today_str:
-                print(f"[INFO] Running scheduled Institutional CAS BTST / STBT Scan @ {now_str} IST...")
-                cas_btst.run_cas_scan(send_telegram)
+                market_trend = get_nifty_trend()
+                print(f"[INFO] Running scheduled Institutional CAS BTST / STBT Scan @ {now_str} IST (Market Trend: {market_trend})...")
+                cas_btst.run_cas_scan(send_telegram, market_trend=market_trend)
                 cas_scanned_today = today_str
 
             # Check and trigger EOD scan at 3:15 PM - 3:30 PM
