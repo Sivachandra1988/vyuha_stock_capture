@@ -1,5 +1,7 @@
 import os
 import json
+import warnings
+warnings.filterwarnings("ignore")
 import yfinance as yf
 import pandas as pd
 import numpy as np

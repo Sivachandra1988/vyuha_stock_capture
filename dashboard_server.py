@@ -1,6 +1,11 @@
 import os
 import sys
 import time
+import warnings
+
+# Suppress 3rd-party library deprecation and future warnings (e.g. Pandas4Warning / yfinance inplace warnings)
+warnings.filterwarnings("ignore")
+os.environ.setdefault("PYTHONWARNINGS", "ignore")
 
 # Set Indian Standard Time (IST) on POSIX/Linux platforms
 if hasattr(time, "tzset"):

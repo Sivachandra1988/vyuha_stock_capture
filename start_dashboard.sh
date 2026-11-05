@@ -10,6 +10,8 @@ HOST=${2:-0.0.0.0}
 # Timezone Configuration (Default: Indian Standard Time / Asia/Kolkata)
 # ------------------------------------------------------------------------------
 export TZ="${TZ:-Asia/Kolkata}"
+# Suppress 3rd-party library deprecation warnings (e.g. Pandas4Warning / yfinance inplace warnings)
+export PYTHONWARNINGS="ignore"
 
 # Apply system timezone if running on Linux with permissions or container
 if command -v timedatectl >/dev/null 2>&1; then
