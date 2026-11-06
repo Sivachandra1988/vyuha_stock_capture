@@ -72,12 +72,33 @@ def calculate_rsi(df, period=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
     
+def clean_dataframe(df):
+    """Flattens MultiIndex columns and ensures numeric OHLC format."""
+    if df is None or len(df) == 0:
+        return pd.DataFrame()
+    if not isinstance(df.columns, pd.MultiIndex) and 'Close' in df.columns and np.issubdtype(df['Close'].dtype, np.number):
+        return df.copy()
+
+    df = df.copy()
+    if isinstance(df.columns, pd.MultiIndex):
+        try:
+            df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
+        except Exception:
+            pass
+    for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+    df = df.dropna(subset=['Close'])
+    return df
+
 def check_advanced_trend_for_dataframe(ticker, df):
     """
     Evaluates UT Bot (EMA cross), WaveTrend (RSI), Squeeze (BB width), ADX, and Chop Zone (ATR).
     """
     try:
-        df = df.copy()
+        df = clean_dataframe(df)
+        if len(df) < 30:
+            return None
         
         # Calculate EMA 10 and 20
         df['EMA_10'] = df['Close'].ewm(span=10, adjust=False).mean()

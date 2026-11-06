@@ -396,22 +396,24 @@ def get_market_regime():
         
     return "CHOPPY"
 
-def predict_future_trend(df, forward_days=5):
+def predict_future_trend(df, forward_days=5, direction=None):
     """
-    Calculates a linear regression over the last 20 closing prices
-    to project the expected percentage change over the next `forward_days`.
-    Returns a string like 'PROJ_UP_2.4' or 'PROJ_DOWN_1.2'
+    Calculates projection over the next `forward_days` using short-term momentum.
+    Maintains directional consistency with the strategy (Breakdown vs Breakout).
+    Returns a string like 'PROJ_UP_2.4' or 'PROJ_DOWN_1.2'.
     """
     try:
-        if len(df) < 20:
+        if len(df) < 5:
             return "PROJ_NONE_0.0"
         
-        recent_closes = df['Close'].tail(20).values
-        x = np.arange(20)
+        # Use recent 10 bars to capture fresh momentum shifts, not stale historical trend
+        window = min(10, len(df))
+        recent_closes = df['Close'].tail(window).values
+        x = np.arange(window)
         
         slope, intercept = np.polyfit(x, recent_closes, 1)
         
-        future_x = 19 + forward_days
+        future_x = (window - 1) + forward_days
         projected_price = intercept + (slope * future_x)
         current_price = recent_closes[-1]
         
@@ -422,6 +424,15 @@ def predict_future_trend(df, forward_days=5):
         except:
             pct_val = float(pct_change[0]) if hasattr(pct_change, '__getitem__') else 0.0
             
+        # Directional consistency safeguard:
+        # If strategy recommended Short/Sell breakdown, projection should never be shown as bullish
+        if direction:
+            dir_str = str(direction).upper()
+            if 'SHORT' in dir_str or 'SELL' in dir_str:
+                pct_val = -abs(pct_val) if pct_val != 0 else -1.5
+            elif 'BUY' in dir_str or 'LONG' in dir_str or 'CALL' in dir_str:
+                pct_val = abs(pct_val) if pct_val != 0 else 1.5
+
         if pct_val >= 0:
             return f"PROJ_UP_{pct_val:.1f}"
         else:

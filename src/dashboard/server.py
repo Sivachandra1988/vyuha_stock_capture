@@ -491,6 +491,9 @@ def get_trades(view: str = Query("auto")):
             trade_type = parts[3].strip() if len(parts) > 3 else "POSITIONAL"
             entry_price_str = parts[4].strip() if len(parts) > 4 else ""
             proj_str = parts[5].strip() if len(parts) > 5 else "PROJ_NONE_0.0"
+            sl_str = parts[6].strip() if len(parts) > 6 else ""
+            t1_str = parts[7].strip() if len(parts) > 7 else ""
+            t2_str = parts[8].strip() if len(parts) > 8 else ""
             date_str = parts[9].strip() if len(parts) > 9 else ""
 
             entry_price_val = None
@@ -500,10 +503,31 @@ def get_trades(view: str = Query("auto")):
                 except ValueError:
                     pass
 
+            def _to_float(v):
+                try:
+                    return float(v) if v else None
+                except Exception:
+                    return None
+
+            rec_info = today_map.get(ticker, {})
+            sl_val = _to_float(sl_str) or rec_info.get("sl")
+            t1_val = _to_float(t1_str) or rec_info.get("target1")
+            t2_val = _to_float(t2_str) or rec_info.get("target2")
+
+            # Directional validation guard:
+            # For Short: SL must be > Entry, T1 must be < Entry
+            # For Long: SL must be < Entry, T1 must be > Entry
+            # If inverted in legacy data, auto-swap to guarantee consistency
+            is_short = 'SHORT' in direction.upper() or 'SELL' in direction.upper()
+            if entry_price_val and sl_val and t1_val:
+                if is_short and sl_val < entry_price_val and t1_val > entry_price_val:
+                    sl_val, t1_val = t1_val, sl_val
+                elif not is_short and sl_val > entry_price_val and t1_val < entry_price_val:
+                    sl_val, t1_val = t1_val, sl_val
+
             quote = live_quotes.get(ticker) or _QUOTE_CACHE.get(ticker)
             wl_ltp = quote["last_price"] if quote else (entry_price_val or 0.0)
 
-            rec_info = today_map.get(ticker, {})
             is_new = (ticker in today_tickers) or (date_str == today_str)
 
             watchlist_objects.append({
@@ -513,6 +537,9 @@ def get_trades(view: str = Query("auto")):
                 "trade_type": trade_type or rec_info.get("trade_type", "POSITIONAL"),
                 "ltp": wl_ltp,
                 "entry_price": entry_price_val if entry_price_val is not None else rec_info.get("entry_price"),
+                "sl": sl_val,
+                "target1": t1_val,
+                "target2": t2_val,
                 "projection": proj_str,
                 "is_new": is_new,
                 "added_date": today_str if is_new else (date_str or "Earlier")
@@ -532,6 +559,9 @@ def get_trades(view: str = Query("auto")):
                 "trade_type": rec.get("trade_type", "POSITIONAL"),
                 "ltp": wl_ltp,
                 "entry_price": rec.get("entry_price", 0.0),
+                "sl": rec.get("sl"),
+                "target1": rec.get("target1"),
+                "target2": rec.get("target2"),
                 "projection": "PROJ_NONE_0.0",
                 "is_new": True,
                 "added_date": today_str

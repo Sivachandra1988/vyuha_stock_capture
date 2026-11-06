@@ -28,9 +28,10 @@ def get_watchlist():
             p4 = d.get('trade_type', 'POSITIONAL')
             p5 = d.get('entry_price', '')
             p6 = d.get('projection', 'PROJ_NONE_0.0')
-            p7 = d.get('target1', '')
-            p8 = d.get('target2', '')
-            res.append(f"{p1} | {p2} | {p3} | {p4} | {p5} | {p6} | {p7} | {p8}")
+            p7 = d.get('sl', '')
+            p8 = d.get('target1', '')
+            p9 = d.get('target2', '')
+            res.append(f"{p1} | {p2} | {p3} | {p4} | {p5} | {p6} | {p7} | {p8} | {p9}")
         return res
 
     # File-based fallback
@@ -48,22 +49,64 @@ def clear_watchlist():
         f.write("")
 
 def append_to_watchlist(entry_str):
-    parts = entry_str.split('|')
-    ticker = parts[0].strip() if len(parts) > 0 else ""
+    parts = [p.strip() for p in entry_str.split('|')]
+    ticker = parts[0] if len(parts) > 0 else ""
     if not ticker:
         return
+
+    strategy = parts[1] if len(parts) > 1 else ""
+    direction = parts[2] if len(parts) > 2 else ""
+    trade_type = parts[3] if len(parts) > 3 else "POSITIONAL"
+    entry_price = parts[4] if len(parts) > 4 else ""
+    projection = parts[5] if len(parts) > 5 else "PROJ_NONE_0.0"
+
+    sl = ""
+    target1 = ""
+    target2 = ""
+
+    if len(parts) >= 9:
+        sl = parts[6]
+        target1 = parts[7]
+        target2 = parts[8]
+    elif len(parts) == 8:
+        # Detect if parts[6] is SL or target1 by checking relation to entry_price
+        try:
+            e_val = float(entry_price)
+            p6_val = float(parts[6])
+            p7_val = float(parts[7])
+            is_short = 'SHORT' in direction.upper() or 'SELL' in direction.upper()
+            if not is_short:
+                if p6_val < e_val and p7_val > e_val:
+                    sl = parts[6]
+                    target1 = parts[7]
+                else:
+                    target1 = parts[6]
+                    target2 = parts[7]
+            else:
+                if p6_val > e_val and p7_val < e_val:
+                    sl = parts[6]
+                    target1 = parts[7]
+                else:
+                    target1 = parts[6]
+                    target2 = parts[7]
+        except Exception:
+            target1 = parts[6]
+            target2 = parts[7]
+    elif len(parts) == 7:
+        target1 = parts[6]
 
     if watch_coll is not None:
         watch_coll.delete_one({"ticker": ticker})
         watch_coll.insert_one({
             "ticker": ticker,
-            "strategy": parts[1].strip() if len(parts) > 1 else "",
-            "direction": parts[2].strip() if len(parts) > 2 else "",
-            "trade_type": parts[3].strip() if len(parts) > 3 else "POSITIONAL",
-            "entry_price": parts[4].strip() if len(parts) > 4 else "",
-            "projection": parts[5].strip() if len(parts) > 5 else "PROJ_NONE_0.0",
-            "target1": parts[6].strip() if len(parts) > 6 else "",
-            "target2": parts[7].strip() if len(parts) > 7 else ""
+            "strategy": strategy,
+            "direction": direction,
+            "trade_type": trade_type,
+            "entry_price": entry_price,
+            "projection": projection,
+            "sl": sl,
+            "target1": target1,
+            "target2": target2
         })
         return
 

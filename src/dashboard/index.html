@@ -2383,10 +2383,29 @@
                 const ltp = item.ltp || 0;
                 ltpBadge.innerHTML = ltp > 0 ? `LTP: <strong style="color:#fff;">₹${ltp.toFixed(2)}</strong>` : '';
 
-                const entry = item.entry_price || 0;
-                const sl = item.current_sl || item.initial_sl || 0;
-                const t1 = item.target1 || (entry > 0 ? (isBuy ? entry * 1.02 : entry * 0.98) : 0);
-                const t2 = item.target2 || (entry > 0 ? (isBuy ? entry * 1.04 : entry * 0.96) : 0);
+                let entry = item.entry_price || 0;
+                let sl = item.current_sl || item.initial_sl || item.sl || 0;
+                let t1 = item.target1 || 0;
+                let t2 = item.target2 || 0;
+
+                // Auto-repair any inverted SL/Targets:
+                // For Short: SL must be > Entry, Targets must be < Entry
+                // For Long: SL must be < Entry, Targets must be > Entry
+                if (entry > 0 && sl > 0 && t1 > 0) {
+                    if (!isBuy && sl < entry && t1 > entry) {
+                        const tmp = sl;
+                        sl = t1;
+                        t1 = tmp;
+                    } else if (isBuy && sl > entry && t1 < entry) {
+                        const tmp = sl;
+                        sl = t1;
+                        t1 = tmp;
+                    }
+                }
+
+                if (!t1 && entry > 0) t1 = isBuy ? entry * 1.02 : entry * 0.98;
+                if (!t2 && entry > 0) t2 = isBuy ? entry * 1.04 : entry * 0.96;
+                if (!sl && entry > 0) sl = isBuy ? entry * 0.98 : entry * 1.02;
 
                 levelsObj = { entry, sl, t1, t2 };
 
