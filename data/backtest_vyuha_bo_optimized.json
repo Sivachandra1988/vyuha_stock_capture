@@ -1,0 +1,203 @@
+{
+  "timestamp": "2026-11-06 17:23:34",
+  "universe_size": 54,
+  "baseline": {
+    "total_trades": 335,
+    "wins": 140,
+    "losses": 148,
+    "be": 47,
+    "win_rate": 48.61,
+    "profit_factor": 1.35,
+    "net_return_pct": 196.47,
+    "avg_win_pct": 5.38,
+    "avg_loss_pct": 3.76,
+    "realized_rr": 1.43,
+    "max_drawdown": 14.38,
+    "opt_pnl_rs": -3462908.49,
+    "opt_profit_factor": 0.61,
+    "score": 85.03
+  },
+  "baseline_params": {
+    "rr_target": 2.0,
+    "be_trigger_rr": 1.0,
+    "min_atr_risk": 1.2,
+    "max_atr_risk": 2.8,
+    "wick_thresh": 0.25,
+    "trap_thresh": 0.3,
+    "vol_mult": 0.75,
+    "max_holding": 20,
+    "use_bo_filter": false
+  },
+  "optimized": {
+    "total_trades": 191,
+    "wins": 100,
+    "losses": 79,
+    "be": 12,
+    "win_rate": 55.87,
+    "profit_factor": 2.13,
+    "net_return_pct": 284.7,
+    "avg_win_pct": 5.37,
+    "avg_loss_pct": 3.19,
+    "realized_rr": 1.68,
+    "max_drawdown": 10.17,
+    "opt_pnl_rs": 170081.57,
+    "opt_profit_factor": 1.14,
+    "score": 186.7
+  },
+  "optimized_params": {
+    "rr_target": 1.8,
+    "be_trigger_rr": 999.0,
+    "min_atr_risk": 1.2,
+    "wick_thresh": 0.28,
+    "vol_mult": 1.0,
+    "max_holding": 15,
+    "use_bo_filter": true
+  },
+  "top_5_configurations": [
+    {
+      "rank": 1,
+      "score": 186.7,
+      "metrics": {
+        "total_trades": 191,
+        "wins": 100,
+        "losses": 79,
+        "be": 12,
+        "win_rate": 55.87,
+        "profit_factor": 2.13,
+        "net_return_pct": 284.7,
+        "avg_win_pct": 5.37,
+        "avg_loss_pct": 3.19,
+        "realized_rr": 1.68,
+        "max_drawdown": 10.17,
+        "opt_pnl_rs": 170081.57,
+        "opt_profit_factor": 1.14,
+        "score": 186.7
+      },
+      "params": {
+        "rr_target": 1.8,
+        "be_trigger_rr": 999.0,
+        "min_atr_risk": 1.2,
+        "wick_thresh": 0.28,
+        "vol_mult": 1.0,
+        "max_holding": 15,
+        "use_bo_filter": true
+      }
+    },
+    {
+      "rank": 2,
+      "score": 170.34,
+      "metrics": {
+        "total_trades": 207,
+        "wins": 110,
+        "losses": 85,
+        "be": 12,
+        "win_rate": 56.41,
+        "profit_factor": 2.05,
+        "net_return_pct": 293.94,
+        "avg_win_pct": 5.22,
+        "avg_loss_pct": 3.3,
+        "realized_rr": 1.58,
+        "max_drawdown": 10.17,
+        "opt_pnl_rs": -947834.35,
+        "opt_profit_factor": 0.78,
+        "score": 170.34
+      },
+      "params": {
+        "rr_target": 1.8,
+        "be_trigger_rr": 999.0,
+        "min_atr_risk": 1.2,
+        "wick_thresh": 0.25,
+        "vol_mult": 1.0,
+        "max_holding": 15,
+        "use_bo_filter": true
+      }
+    },
+    {
+      "rank": 3,
+      "score": 169.03,
+      "metrics": {
+        "total_trades": 191,
+        "wins": 96,
+        "losses": 79,
+        "be": 16,
+        "win_rate": 54.86,
+        "profit_factor": 2.0,
+        "net_return_pct": 252.94,
+        "avg_win_pct": 5.26,
+        "avg_loss_pct": 3.19,
+        "realized_rr": 1.65,
+        "max_drawdown": 10.17,
+        "opt_pnl_rs": -136671.15,
+        "opt_profit_factor": 1.02,
+        "score": 169.03
+      },
+      "params": {
+        "rr_target": 1.8,
+        "be_trigger_rr": 1.2,
+        "min_atr_risk": 1.2,
+        "wick_thresh": 0.28,
+        "vol_mult": 1.0,
+        "max_holding": 15,
+        "use_bo_filter": true
+      }
+    },
+    {
+      "rank": 4,
+      "score": 162.96,
+      "metrics": {
+        "total_trades": 190,
+        "wins": 99,
+        "losses": 79,
+        "be": 12,
+        "win_rate": 55.62,
+        "profit_factor": 1.98,
+        "net_return_pct": 248.01,
+        "avg_win_pct": 5.05,
+        "avg_loss_pct": 3.19,
+        "realized_rr": 1.58,
+        "max_drawdown": 10.17,
+        "opt_pnl_rs": -167755.05,
+        "opt_profit_factor": 1.01,
+        "score": 162.96
+      },
+      "params": {
+        "rr_target": 2.2,
+        "be_trigger_rr": 999.0,
+        "min_atr_risk": 1.2,
+        "wick_thresh": 0.28,
+        "vol_mult": 1.0,
+        "max_holding": 15,
+        "use_bo_filter": true
+      }
+    },
+    {
+      "rank": 5,
+      "score": 162.56,
+      "metrics": {
+        "total_trades": 190,
+        "wins": 99,
+        "losses": 79,
+        "be": 12,
+        "win_rate": 55.62,
+        "profit_factor": 1.98,
+        "net_return_pct": 247.4,
+        "avg_win_pct": 5.04,
+        "avg_loss_pct": 3.19,
+        "realized_rr": 1.58,
+        "max_drawdown": 10.17,
+        "opt_pnl_rs": -104255.21,
+        "opt_profit_factor": 1.04,
+        "score": 162.56
+      },
+      "params": {
+        "rr_target": 2.0,
+        "be_trigger_rr": 999.0,
+        "min_atr_risk": 1.2,
+        "wick_thresh": 0.28,
+        "vol_mult": 1.0,
+        "max_holding": 15,
+        "use_bo_filter": true
+      }
+    }
+  ]
+}

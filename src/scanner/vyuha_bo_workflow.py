@@ -230,18 +230,18 @@ def validate_vyuha_bo_setup(ticker, df_intraday, df_daily, candidate_direction=N
         detected_direction = "BUY"
         setup_type = "SUPPLY_1_EXPANSION_BREAKOUT"
         bo_status = f"🚀 SUPPLY BROKE → Tgt 2: {s2_val:.1f}"
-        sl = max(s1['bot'] - (0.5 * atr_intra), c_close - (2.0 * atr_intra))
-        target1 = c_close + 2.0 * (c_close - sl)
-        target2 = max(s2_val, c_close + 3.0 * (c_close - sl))
+        sl = max(s1['bot'] - (0.3 * atr_intra), c_close - (1.5 * atr_intra))
+        target1 = c_close + 1.8 * (c_close - sl)
+        target2 = max(s2_val, c_close + 2.5 * (c_close - sl))
 
     # Trigger 2: Equilibrium Zone Breakout (Cleared VAH + POC + VWAP with Bull Ribbon)
     elif c_close >= vah and c_close >= poc_price and c_close >= vwap_val and is_bull_ribbon and not is_bull_trap:
         detected_direction = "BUY"
         setup_type = "EQUILIBRIUM_VAH_BREAKOUT"
         bo_status = f"🟢 EQUILIBRIUM BREAKOUT → Supply 1: {s1['bot']:.1f}"
-        sl = min(val, c_close - (1.5 * atr_intra))
-        target1 = c_close + 2.0 * (c_close - sl)
-        target2 = s1['center'] if s1['center'] > target1 else (c_close + 3.0 * (c_close - sl))
+        sl = min(val, c_close - (1.2 * atr_intra))
+        target1 = c_close + 1.8 * (c_close - sl)
+        target2 = s1['center'] if s1['center'] > target1 else (c_close + 2.5 * (c_close - sl))
 
     # Trigger 3: Demand 1 Bounce Breakout (Rejection of Demand floor + reclaim of POC / EMA9)
     elif (c_low <= d1['top'] and c_close >= d1['bot']) and lower_wick_ratio >= 0.28 and c_close >= c_open:
@@ -249,8 +249,8 @@ def validate_vyuha_bo_setup(ticker, df_intraday, df_daily, candidate_direction=N
         setup_type = "DEMAND_1_BOUNCE_BREAKOUT"
         bo_status = f"🛡️ DEMAND BOUNCE → POC/Supply: {s1['bot']:.1f}"
         sl = min(c_low, d1['bot']) - (0.3 * atr_intra)
-        target1 = c_close + 2.0 * (c_close - sl)
-        target2 = s1['bot'] if s1['bot'] > target1 else (c_close + 3.0 * (c_close - sl))
+        target1 = c_close + 1.8 * (c_close - sl)
+        target2 = s1['bot'] if s1['bot'] > target1 else (c_close + 2.5 * (c_close - sl))
 
     # --- 🔴 BEARISH BREAKDOWN / REJECTION (BD-DOWN) ---
     # Trigger 1: Demand 1 Broken -> Expansion towards Demand 2
@@ -258,18 +258,18 @@ def validate_vyuha_bo_setup(ticker, df_intraday, df_daily, candidate_direction=N
         detected_direction = "SELL"
         setup_type = "DEMAND_1_EXPANSION_BREAKDOWN"
         bo_status = f"🩸 DEMAND BROKE → Tgt 2: {d2_val:.1f}"
-        sl = min(d1['top'] + (0.5 * atr_intra), c_close + (2.0 * atr_intra))
-        target1 = c_close - 2.0 * (sl - c_close)
-        target2 = min(d2_val, c_close - 3.0 * (sl - c_close))
+        sl = min(d1['top'] + (0.3 * atr_intra), c_close + (1.5 * atr_intra))
+        target1 = c_close - 1.8 * (sl - c_close)
+        target2 = min(d2_val, c_close - 2.5 * (sl - c_close))
 
     # Trigger 2: Equilibrium Zone Breakdown (Lost VAL + POC + VWAP with Bear Ribbon - like MAXHEALTH)
     elif c_close <= val and c_close <= poc_price and c_close <= vwap_val and is_bear_ribbon and not is_bear_trap:
         detected_direction = "SELL"
         setup_type = "EQUILIBRIUM_VAL_BREAKDOWN"
         bo_status = f"🔴 EQUILIBRIUM BREAKDOWN → Demand 1: {d1['top']:.1f}"
-        sl = max(vah, c_close + (1.5 * atr_intra))
-        target1 = c_close - 2.0 * (sl - c_close)
-        target2 = d1['center'] if d1['center'] < target1 else (c_close - 3.0 * (sl - c_close))
+        sl = max(vah, c_close + (1.2 * atr_intra))
+        target1 = c_close - 1.8 * (sl - c_close)
+        target2 = d1['center'] if d1['center'] < target1 else (c_close - 2.5 * (sl - c_close))
 
     # Trigger 3: Supply 1 Rejection Breakdown (Rejection of Supply ceiling + rejection wick)
     elif (c_high >= s1['bot'] and c_close <= s1['top']) and upper_wick_ratio >= 0.25 and c_close <= c_open:
@@ -277,8 +277,8 @@ def validate_vyuha_bo_setup(ticker, df_intraday, df_daily, candidate_direction=N
         setup_type = "SUPPLY_1_REJECTION_BREAKDOWN"
         bo_status = f"🛑 SUPPLY REJECTION → POC/Demand: {d1['top']:.1f}"
         sl = max(c_high, s1['top']) + (0.3 * atr_intra)
-        target1 = c_close - 2.0 * (sl - c_close)
-        target2 = d1['top'] if d1['top'] < target1 else (c_close - 3.0 * (sl - c_close))
+        target1 = c_close - 1.8 * (sl - c_close)
+        target2 = d1['top'] if d1['top'] < target1 else (c_close - 2.5 * (sl - c_close))
 
     if not detected_direction:
         return {
@@ -299,11 +299,11 @@ def validate_vyuha_bo_setup(ticker, df_intraday, df_daily, candidate_direction=N
 
     risk_pts = abs(c_close - sl)
     
-    # Enforce minimum & maximum risk limits (1.0x to 3.0x ATR)
-    if risk_pts < (1.0 * atr_intra):
-        sl = c_close - (1.5 * atr_intra) if detected_direction == "BUY" else c_close + (1.5 * atr_intra)
+    # Enforce fine-tuned minimum & maximum risk limits (1.2x to 2.5x ATR)
+    if risk_pts < (1.2 * atr_intra):
+        sl = c_close - (1.2 * atr_intra) if detected_direction == "BUY" else c_close + (1.2 * atr_intra)
         risk_pts = abs(c_close - sl)
-        target1 = c_close + (2.0 * risk_pts) if detected_direction == "BUY" else c_close - (2.0 * risk_pts)
+        target1 = c_close + (1.8 * risk_pts) if detected_direction == "BUY" else c_close - (1.8 * risk_pts)
 
     # Generate Option Contract Recommendation
     try:
