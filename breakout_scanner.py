@@ -29,7 +29,7 @@ if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
 from connectors import angelone
-from scanner import core, eod, trades, swing, advanced_trend, vyuha, cas_btst
+from scanner import core, eod, trades, swing, advanced_trend, vyuha, cas_btst, vyuha_bo_workflow
 import db_storage
 
 # Telegram credentials (reads from environment variables with fallback)
@@ -430,6 +430,8 @@ def run_scanner_loop(continuous=True, daemon=False, force=False):
                 force_full = (now_str == "10:15")
                 print(f"[INFO] Running scheduled Swing scan cycle at {now_str} (Force Full Universe Rebuild: {force_full})...")
                 swing.execute_swing_scan(send_telegram, force_full=force_full, market_trend=market_trend)
+                print(f"[INFO] Running scheduled VYUHA-BO Workflow scan at {now_str}...")
+                vyuha_bo_workflow.run_vyuha_bo_workflow(send_telegram, market_trend=market_trend)
                 time.sleep(61)
                 continue
                 
@@ -475,6 +477,9 @@ if __name__ == "__main__":
             sys.exit(0)
         elif arg in ["--test-cas", "--cas", "-cas"]:
             cas_btst.run_cas_scan(send_telegram, force=True)
+            sys.exit(0)
+        elif arg in ["--test-vyuha-bo", "--vyuha-bo", "-vbo"]:
+            vyuha_bo_workflow.run_vyuha_bo_workflow(send_telegram, market_trend="NEUTRAL")
             sys.exit(0)
         elif arg in ["--once", "--single", "-s"]:
             run_scanner_loop(continuous=False, daemon=False)

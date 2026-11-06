@@ -348,6 +348,32 @@ def execute_swing_scan(send_telegram_fn, force_full=False, market_trend="NEUTRAL
         ticker = c["ticker"]
         if ticker in active_tickers:
             continue
+
+        # Validate candidate through Vyuha-BO Institutional Gate
+        try:
+            from scanner import vyuha_bo_workflow
+            ticker_ns = ticker + ".NS"
+            df_daily_cand = yf.download(ticker_ns, period="3mo", interval="1d", progress=False, auto_adjust=True)
+            if len(tickers) == 1:
+                df_intra_cand = df_all
+            else:
+                df_intra_cand = df_all[ticker_ns].dropna() if ticker_ns in df_all.columns.levels[0] else None
+
+            if df_intra_cand is not None and len(df_intra_cand) >= 30 and len(df_daily_cand) >= 15:
+                bo_check = vyuha_bo_workflow.validate_vyuha_bo_setup(
+                    ticker, df_intra_cand, df_daily_cand, candidate_direction=c["direction"]
+                )
+                if not bo_check["is_valid"]:
+                    print(f"  [VYUHA-BO BLOCKED] {ticker} ({c['direction']}): {bo_check.get('rejection_reason')}")
+                    continue
+                else:
+                    print(f"  [VYUHA-BO CONFIRMED] {ticker} ({c['direction']}): {bo_check.get('bo_status')}")
+                    c["sl"] = bo_check["sl"]
+                    c["target1"] = bo_check["target1"]
+                    c["target2"] = bo_check["target2"]
+                    c["status"] = f"Vyuha-BO {bo_check['setup_type']}"
+        except Exception as err:
+            print(f"  [VYUHA-BO Check Warn] {ticker}: {err}")
             
         alert_key = f"{ticker}_{c['status']}_{c['setup_date']}"
         if alert_key not in alerted_today:
