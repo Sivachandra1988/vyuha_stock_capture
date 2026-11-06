@@ -16,6 +16,7 @@ DAILY_RECOMMENDATIONS_FILE = os.path.join(DATA_DIR, "daily_recommendations.json"
 watch_coll = db['watchlist'] if db is not None else None
 paper_coll = db['paper_trades'] if db is not None else None
 pnl_coll = db['pnl_log'] if db is not None else None
+recs_coll = db['daily_recommendations'] if db is not None else None
 
 def get_watchlist():
     if watch_coll is not None:
@@ -216,8 +217,8 @@ def get_pnl_log():
     except Exception:
         return []
 
-def record_daily_recommendation(ticker, strategy, direction, trade_type, entry, sl=0.0, target1=0.0, target2=0.0, reason="", date_str=None):
-    """Records a fresh recommendation into today's daily recommendations list."""
+def record_daily_recommendation(ticker, strategy, direction, trade_type, entry, sl=0.0, target1=0.0, target2=0.0, reason="", date_str=None, option_info=None, **kwargs):
+    """Records a fresh recommendation into today's daily recommendations list and syncs with MongoDB."""
     today_str = date_str or datetime.datetime.now().strftime("%Y-%m-%d")
     now_time = datetime.datetime.now().strftime("%H:%M:%S")
     data = {"date": today_str, "items": []}
@@ -252,6 +253,24 @@ def record_daily_recommendation(ticker, strategy, direction, trade_type, entry, 
         "date": today_str
     }
 
+    if option_info and isinstance(option_info, dict):
+        item_obj["option"] = {
+            "contract": option_info.get("full_contract", option_info.get("contract", "")),
+            "action": option_info.get("action", ""),
+            "strike": option_info.get("strike", 0.0),
+            "expiry": option_info.get("expiry", ""),
+            "lot_size": option_info.get("lot_size", 0),
+            "est_gain_t1_pts": option_info.get("est_gain_t1_pts", 0.0),
+            "est_sl_pts": option_info.get("est_sl_pts", 0.0),
+            "total_profit_t1_rs": option_info.get("total_profit_t1_rs", 0.0),
+            "total_risk_rs": option_info.get("total_risk_rs", 0.0),
+            "alt_strategy": option_info.get("alt_option_selling", "")
+        }
+
+    for k, v in kwargs.items():
+        if k not in item_obj:
+            item_obj[k] = v
+
     if existing_idx is not None:
         data["items"][existing_idx] = item_obj
     else:
@@ -263,15 +282,36 @@ def record_daily_recommendation(ticker, strategy, direction, trade_type, entry, 
     except Exception as e:
         print(f"Error saving daily recommendations: {e}")
 
+    # Sync to MongoDB collection
+    if recs_coll is not None:
+        try:
+            recs_coll.update_one(
+                {"ticker": ticker, "date": today_str},
+                {"$set": item_obj},
+                upsert=True
+            )
+        except Exception as e:
+            print(f"Error syncing daily recommendation to MongoDB: {e}")
+
 def get_today_recommendations():
-    """Returns today's fresh recommendations list. Falls back to latest recorded recommendations if morning scan has not run yet."""
-    if not os.path.exists(DAILY_RECOMMENDATIONS_FILE):
-        return []
-    try:
-        with open(DAILY_RECOMMENDATIONS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data.get("items", [])
-    except Exception:
-        pass
+    """Returns today's fresh recommendations list. Falls back to MongoDB or latest recorded recommendations."""
+    if os.path.exists(DAILY_RECOMMENDATIONS_FILE):
+        try:
+            with open(DAILY_RECOMMENDATIONS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                items = data.get("items", [])
+                if items:
+                    return items
+        except Exception:
+            pass
+
+    if recs_coll is not None:
+        try:
+            docs = list(recs_coll.find({}, {'_id': False}))
+            if docs:
+                return docs
+        except Exception:
+            pass
+
     return []
 

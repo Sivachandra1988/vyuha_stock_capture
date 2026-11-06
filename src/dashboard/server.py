@@ -35,7 +35,7 @@ sys.path.append(os.path.join(BASE_DIR, "src"))
 import db_storage
 
 from connectors import angelone
-from scanner import core
+from scanner import core, options
 
 app = FastAPI(title="Trader Pilot Breakout Stocks Dashboard")
 
@@ -329,11 +329,12 @@ def fetch_quotes_with_cache(tickers: list) -> dict:
 
 
 @app.get("/api/trades")
-def get_trades(view: str = Query("auto")):
+def get_trades(view: str = "auto"):
     """Loads paper trades and updates them with live LTP, projections, Nifty indices, and watchlist.
     Only queries live quotes for the tickers currently active on the user's screen (view) to minimize
     API load, avoid rate-limiting, and conserve mobile battery/data.
     """
+    view_str = view if isinstance(view, str) else getattr(view, "default", "auto")
     trades = db_storage.get_paper_trades()
     watchlist = db_storage.get_watchlist()
 
@@ -359,7 +360,7 @@ def get_trades(view: str = Query("auto")):
     watchlist_tickers = list(set(watchlist_tickers))
 
     # Determine tickers to query based on view
-    view_lower = (view or "auto").lower()
+    view_lower = (view_str or "auto").lower()
     if view_lower in ["positions", "active"]:
         tickers_to_query = [t["ticker"] for t in trades if t.get("status") in ["ACTIVE", "PARTIAL_EXIT"] and t.get("ticker")]
     elif view_lower == "pending":
@@ -530,6 +531,22 @@ def get_trades(view: str = Query("auto")):
 
             is_new = (ticker in today_tickers) or (date_str == today_str)
 
+            # Resolve option recommendation
+            opt_obj = rec_info.get("option")
+            if not opt_obj and (entry_price_val or wl_ltp):
+                base_p = entry_price_val or wl_ltp
+                try:
+                    opt_obj = options.recommend_option_contract(
+                        ticker=ticker,
+                        direction=direction or "BUY",
+                        spot_entry=base_p,
+                        spot_sl=sl_val or (base_p * 0.98),
+                        spot_target1=t1_val or (base_p * 1.04),
+                        spot_target2=t2_val
+                    )
+                except Exception:
+                    opt_obj = None
+
             watchlist_objects.append({
                 "ticker": ticker,
                 "strategy": strategy or rec_info.get("strategy", ""),
@@ -542,7 +559,8 @@ def get_trades(view: str = Query("auto")):
                 "target2": t2_val,
                 "projection": proj_str,
                 "is_new": is_new,
-                "added_date": today_str if is_new else (date_str or "Earlier")
+                "added_date": today_str if is_new else (date_str or "Earlier"),
+                "option": opt_obj
             })
 
     # Ensure any fresh daily recommendations are surfaced in the watchlist
@@ -552,6 +570,21 @@ def get_trades(view: str = Query("auto")):
             seen_tickers.add(t_rec)
             quote = live_quotes.get(t_rec) or _QUOTE_CACHE.get(t_rec)
             wl_ltp = quote["last_price"] if quote else rec.get("entry_price", 0.0)
+            rec_opt = rec.get("option")
+            if not rec_opt and (rec.get("entry_price", 0.0) or wl_ltp):
+                base_p = rec.get("entry_price", 0.0) or wl_ltp
+                try:
+                    rec_opt = options.recommend_option_contract(
+                        ticker=t_rec,
+                        direction=rec.get("direction", "BUY"),
+                        spot_entry=float(base_p),
+                        spot_sl=float(rec.get("sl", 0.0)) or (base_p * 0.98),
+                        spot_target1=float(rec.get("target1", 0.0)) or (base_p * 1.04),
+                        spot_target2=float(rec.get("target2", 0.0)) if rec.get("target2") else None
+                    )
+                except Exception:
+                    rec_opt = None
+
             watchlist_objects.insert(0, {
                 "ticker": t_rec,
                 "strategy": rec.get("strategy", "Swing"),
@@ -564,7 +597,8 @@ def get_trades(view: str = Query("auto")):
                 "target2": rec.get("target2"),
                 "projection": "PROJ_NONE_0.0",
                 "is_new": True,
-                "added_date": today_str
+                "added_date": today_str,
+                "option": rec_opt
             })
 
     return {

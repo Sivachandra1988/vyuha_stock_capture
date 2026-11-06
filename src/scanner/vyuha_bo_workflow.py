@@ -44,7 +44,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
-from scanner import vyuha, trades, core
+from scanner import vyuha, trades, core, options
 import db_storage
 
 WORKFLOW_ALERTS_FILE = os.path.join(DATA_DIR, "vyuha_bo_alerts.json")
@@ -305,6 +305,21 @@ def validate_vyuha_bo_setup(ticker, df_intraday, df_daily, candidate_direction=N
         risk_pts = abs(c_close - sl)
         target1 = c_close + (2.0 * risk_pts) if detected_direction == "BUY" else c_close - (2.0 * risk_pts)
 
+    # Generate Option Contract Recommendation
+    try:
+        opt_rec = options.recommend_option_contract(
+            ticker=ticker,
+            direction=detected_direction,
+            spot_entry=c_close,
+            spot_sl=sl,
+            spot_target1=target1,
+            spot_target2=target2,
+            demand_floor=d1['bot'],
+            supply_ceiling=s1['top']
+        )
+    except Exception as e:
+        opt_rec = None
+
     return {
         "is_valid": True,
         "ticker": ticker,
@@ -326,6 +341,7 @@ def validate_vyuha_bo_setup(ticker, df_intraday, df_daily, candidate_direction=N
             "val": round(val, 2),
             "vwap": round(vwap_val, 2)
         },
+        "option": opt_rec,
         "rejection_reason": None
     }
 
@@ -444,7 +460,8 @@ def run_vyuha_bo_workflow(send_telegram_fn=None, tickers=None, market_trend="NEU
                 sl=s["sl"],
                 target1=s["target1"],
                 target2=s["target2"],
-                reason=f"{s['bo_status']} ({s['setup_type']})"
+                reason=f"{s['bo_status']} ({s['setup_type']})",
+                option_info=s.get("option")
             )
         except Exception as e:
             print(f"[ERROR] db_storage.record_daily_recommendation failed: {e}")
@@ -462,6 +479,7 @@ def run_vyuha_bo_workflow(send_telegram_fn=None, tickers=None, market_trend="NEU
         if send_telegram_fn:
             icon = "🟢" if s["direction"] == "BUY" else "🔴"
             action_verb = "BUY / CALL" if s["direction"] == "BUY" else "SELL / PUT"
+            opt_block = s["option"]["formatted_block"] + "\n\n" if s.get("option") else ""
             msg = (
                 f"🏛️ *VYUHA-BO INSTITUTIONAL SIGNAL: #{ticker}*\n"
                 f"━━━━━━━━━━━━━━━━━━\n"
@@ -476,6 +494,7 @@ def run_vyuha_bo_workflow(send_telegram_fn=None, tickers=None, market_trend="NEU
                 f"• *Value Area:* `[{s['zones']['val']} - {s['zones']['vah']}]`\n"
                 f"• *Demand 1:* `{s['zones']['demand_1']}` | *Supply 1:* `{s['zones']['supply_1']}`\n"
                 f"• *Hold Duration:* 1 to 2 Days (Positional Swing)\n\n"
+                f"{opt_block}"
                 f"_⚠️ Not SEBI registered. Strictly educational. Mandatory generic SL (1.5x ATR / max 2% risk)._"
             )
             try:
