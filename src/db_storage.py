@@ -217,6 +217,37 @@ def get_pnl_log():
     except Exception:
         return []
 
+def is_ticker_in_cooldown_today(ticker, date_str=None):
+    """
+    Returns True if the ticker has hit Stop-Loss or been closed with a loss today.
+    Used to prevent same-day whipsaw flips and revenge trading.
+    """
+    today_str = date_str or datetime.datetime.now().strftime("%Y-%m-%d")
+    if pnl_coll is not None:
+        try:
+            match = pnl_coll.find_one({
+                "ticker": ticker,
+                "date": today_str,
+                "reason": {"$in": ["HIT_SL", "HIT_SL_BREAKEVEN", "STOP LOSS"]}
+            })
+            if match:
+                return True
+        except Exception:
+            pass
+
+    # File-based check
+    if os.path.exists(PNL_LOG_FILE):
+        try:
+            with open(PNL_LOG_FILE, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row.get("ticker") == ticker and row.get("date") == today_str:
+                        if row.get("reason") in ["HIT_SL", "HIT_SL_BREAKEVEN", "STOP LOSS"]:
+                            return True
+        except Exception:
+            pass
+    return False
+
 def record_daily_recommendation(ticker, strategy, direction, trade_type, entry, sl=0.0, target1=0.0, target2=0.0, reason="", date_str=None, option_info=None, **kwargs):
     """Records a fresh recommendation into today's daily recommendations list and syncs with MongoDB."""
     today_str = date_str or datetime.datetime.now().strftime("%Y-%m-%d")

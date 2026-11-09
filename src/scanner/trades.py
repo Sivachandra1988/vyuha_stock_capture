@@ -85,6 +85,11 @@ def initiate_paper_trade(ticker, result):
         if t["ticker"] == ticker and t["status"] in ["PENDING", "ACTIVE", "PARTIAL_EXIT"]:
             print(f"Trade already exists for {ticker} (Status: {t['status']}). Skipping initiation.")
             return
+
+    # Check same-day stop-loss cooldown to prevent revenge trading and whipsaws
+    if db_storage.is_ticker_in_cooldown_today(ticker):
+        print(f"Cooldown active for #{ticker} (Stopped out today). Skipping new trade initiation.")
+        return
             
     if active_count >= 5:
         print(f"Global limit reached: {active_count} ACTIVE positions. Skipping initiation for {ticker}.")

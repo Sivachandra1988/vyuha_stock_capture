@@ -72,7 +72,7 @@ def send_telegram(message, chat_id=None):
     """Sends a markdown message with mandatory SEBI disclaimer & generic SL rule to the Telegram group."""
     target_chat = chat_id if chat_id else VYUHA_CHAT_ID
 
-    if DISCLAIMER_TAG not in message:
+    if DISCLAIMER_TAG.lower() not in message.lower():
         message = message.rstrip() + STANDARD_FOOTER
 
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"

@@ -123,12 +123,35 @@ def validate_vyuha_bo_setup(ticker, df_intraday, df_daily, candidate_direction=N
     c_open = float(df_intraday['Open'].iloc[-1])
     c_high = float(df_intraday['High'].iloc[-1])
     c_low = float(df_intraday['Low'].iloc[-1])
+
+    # Check same-day stop-loss cooldown (Prevent revenge trading / whipsaw flips)
+    if db_storage.is_ticker_in_cooldown_today(ticker):
+        return {
+            "is_valid": False,
+            "ticker": ticker,
+            "rejection_reason": f"SAME-DAY COOLDOWN: #{ticker} was stopped out today. Lockout active to prevent revenge trading/whipsaws."
+        }
     
     atr_daily_series = vyuha.calculate_atr(df_daily, 14)
     atr_daily = float(atr_daily_series.iloc[-1]) if len(atr_daily_series) > 0 else (c_close * 0.015)
     
     atr_intra_series = vyuha.calculate_atr(df_intraday, 14)
     atr_intra = float(atr_intra_series.iloc[-1]) if len(atr_intra_series) > 0 else (c_close * 0.005)
+
+    # Higher Timeframe (Daily) Trend & Regime
+    daily_regime = "NEUTRAL"
+    if len(df_daily) >= 20:
+        d_ema10 = float(df_daily['Close'].ewm(span=10, adjust=False).mean().iloc[-1])
+        d_ema20 = float(df_daily['Close'].ewm(span=20, adjust=False).mean().iloc[-1])
+        delta = df_daily['Close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        d_rsi = float((100 - (100 / (1 + rs))).iloc[-1])
+        if d_ema10 > d_ema20 and d_rsi >= 50:
+            daily_regime = "BULLISH"
+        elif d_ema10 < d_ema20 and d_rsi <= 50:
+            daily_regime = "BEARISH"
 
     # 2. Vyuha Confluence Zones
     zones = vyuha.calculate_vyuha_zones(df_daily, c_close, atr_daily)
@@ -157,6 +180,12 @@ def validate_vyuha_bo_setup(ticker, df_intraday, df_daily, candidate_direction=N
         val = c_close - (0.5 * atr_intra)
 
     eq_mid = (vah + val) / 2.0
+
+    # 3b. Value Area Width Quality Gate & Volume Expansion
+    va_width_pct = ((vah - val) / val) * 100.0 if val > 0 else 0.0
+    vol_sma20 = float(df_intraday['Volume'].rolling(20).mean().iloc[-1]) if 'Volume' in df_intraday.columns and len(df_intraday) >= 20 else 1.0
+    c_vol = float(df_intraday['Volume'].iloc[-1]) if 'Volume' in df_intraday.columns else 1.0
+    vol_mult = (c_vol / vol_sma20) if vol_sma20 > 0 else 1.0
 
     # 4. Moving Averages & Session VWAP
     df_intraday = df_intraday.copy()
@@ -236,6 +265,20 @@ def validate_vyuha_bo_setup(ticker, df_intraday, df_daily, candidate_direction=N
 
     # Trigger 2: Equilibrium Zone Breakout (Cleared VAH + POC + VWAP with Bull Ribbon)
     elif c_close >= vah and c_close >= poc_price and c_close >= vwap_val and is_bull_ribbon and not is_bull_trap:
+        # Quality Gate: Suppress Long breakouts if Daily timeframe is Bearish
+        if daily_regime == "BEARISH":
+            return {
+                "is_valid": False,
+                "ticker": ticker,
+                "rejection_reason": f"BUY BLOCKED: #{ticker} Daily timeframe is BEARISH. Long breakout suppressed."
+            }
+        # Quality Gate: Suppress breakouts in narrow chop zones without volume expansion
+        if va_width_pct < 0.90 and vol_mult < 1.25:
+            return {
+                "is_valid": False,
+                "ticker": ticker,
+                "rejection_reason": f"BUY BLOCKED: Narrow Equilibrium Box ({va_width_pct:.2f}% < 0.90%) without expansion volume ({vol_mult:.2f}x < 1.25x)."
+            }
         detected_direction = "BUY"
         setup_type = "EQUILIBRIUM_VAH_BREAKOUT"
         bo_status = f"🟢 EQUILIBRIUM BREAKOUT → Supply 1: {s1['bot']:.1f}"
@@ -264,6 +307,20 @@ def validate_vyuha_bo_setup(ticker, df_intraday, df_daily, candidate_direction=N
 
     # Trigger 2: Equilibrium Zone Breakdown (Lost VAL + POC + VWAP with Bear Ribbon - like MAXHEALTH)
     elif c_close <= val and c_close <= poc_price and c_close <= vwap_val and is_bear_ribbon and not is_bear_trap:
+        # Quality Gate: Suppress Short breakdowns if Daily timeframe is Bullish (Prevents WIPRO/BHARTIARTL traps)
+        if daily_regime == "BULLISH":
+            return {
+                "is_valid": False,
+                "ticker": ticker,
+                "rejection_reason": f"SELL BLOCKED: #{ticker} Daily timeframe is BULLISH. Counter-trend breakdown suppressed."
+            }
+        # Quality Gate: Suppress breakdowns in narrow chop zones without volume expansion
+        if va_width_pct < 0.90 and vol_mult < 1.25:
+            return {
+                "is_valid": False,
+                "ticker": ticker,
+                "rejection_reason": f"SELL BLOCKED: Narrow Equilibrium Box ({va_width_pct:.2f}% < 0.90%) without expansion volume ({vol_mult:.2f}x < 1.25x)."
+            }
         detected_direction = "SELL"
         setup_type = "EQUILIBRIUM_VAL_BREAKDOWN"
         bo_status = f"🔴 EQUILIBRIUM BREAKDOWN → Demand 1: {d1['top']:.1f}"
@@ -495,8 +552,7 @@ def run_vyuha_bo_workflow(send_telegram_fn=None, tickers=None, market_trend="NEU
                 f"• *Demand 1:* `{s['zones']['demand_1']}` | *Supply 1:* `{s['zones']['supply_1']}`\n"
                 f"• *Hold Duration:* 1 to 2 Days (Positional Swing)\n\n"
                 f"{opt_block}"
-                f"_⚠️ Not SEBI registered. Strictly educational. Mandatory generic SL (1.5x ATR / max 2% risk)._"
-            )
+            ).strip()
             try:
                 send_telegram_fn(msg)
             except Exception as e:
